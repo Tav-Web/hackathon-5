@@ -1,0 +1,157 @@
+# Docker Compose para ambiente de Homologacao
+# Simula producao localmente - sem volumes de codigo, imagens buildadas
+#
+# Uso: docker-compose -f docker-compose.homolog.yml up --build
+#
+# IMPORTANTE: Copie .env.homolog.example para .env.homolog e configure as credenciais
+
+services:
+  # ============================================
+  # APLICACAO
+  # ============================================
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hackathon-homolog-backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads_data:/app/uploads
+    env_file:
+      - .env.homolog
+    environment:
+      - ENVIRONMENT=homolog
+      - DEBUG=false
+      - API_V1_PREFIX=/api/v1
+      - PROJECT_NAME=Change Detector API
+      - DATABASE_URL=postgresql://hackathon:${DB_PASSWORD:-hackathon123}@db:5432/hackathon
+      - CORS_ORIGINS=["http://localhost:3000","http://127.0.0.1:3000"]
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD:-minioadmin123}
+      - MINIO_BUCKET=hackathon
+      - MINIO_SECURE=false
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hackathon-homolog-celery
+    command: /app/scripts/celery_entrypoint.sh
+    volumes:
+      - uploads_data:/app/uploads
+    env_file:
+      - .env.homolog
+    environment:
+      - ENVIRONMENT=homolog
+      - DEBUG=false
+      - DATABASE_URL=postgresql://hackathon:${DB_PASSWORD:-hackathon123}@db:5432/hackathon
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD:-minioadmin123}
+      - MINIO_BUCKET=hackathon
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - backend
+      - redis
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hackathon-homolog-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  # ============================================
+  # INFRAESTRUTURA
+  # ============================================
+
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: hackathon-homolog-db
+    environment:
+      POSTGRES_DB: hackathon
+      POSTGRES_USER: hackathon
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-hackathon123}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hackathon -d hackathon"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:8-alpine
+    container_name: hackathon-homolog-redis
+    command: redis-server --appendonly yes --maxmemory 512mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:latest
+    container_name: hackathon-homolog-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-minioadmin123}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  uploads_data:
+
+networks:
+  default:
+    name: hackathon-homolog-network

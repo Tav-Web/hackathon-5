@@ -67,15 +67,46 @@ class GeeService:
 
         Tenta autenticação via service account se configurado,
         caso contrário usa autenticação interativa/default.
+
+        Suporta 3 métodos de autenticação:
+        1. GEE_SERVICE_ACCOUNT_JSON: JSON string direto (para deploy)
+        2. GEE_SERVICE_ACCOUNT_KEY: Caminho para arquivo JSON (para dev local)
+        3. Autenticação default do GEE
         """
         if self._initialized:
             return
 
         import json
         import os
+        import tempfile
 
         try:
-            # Tenta usar service account se configurado
+            # Método 1: JSON string direto (preferido para deploy)
+            gee_json = os.getenv("GEE_SERVICE_ACCOUNT_JSON")
+            if gee_json:
+                try:
+                    sa_info = json.loads(gee_json)
+                    service_account_email = sa_info.get('client_email')
+
+                    # Cria arquivo temporário com o JSON
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        json.dump(sa_info, f)
+                        temp_key_file = f.name
+
+                    credentials = ee.ServiceAccountCredentials(
+                        email=service_account_email,
+                        key_file=temp_key_file
+                    )
+                    ee.Initialize(
+                        credentials=credentials,
+                        project=settings.GEE_PROJECT_ID or None
+                    )
+                    self._initialized = True
+                    return
+                except json.JSONDecodeError:
+                    print("Aviso: GEE_SERVICE_ACCOUNT_JSON invalido, tentando arquivo...")
+
+            # Método 2: Caminho para arquivo JSON (dev local)
             if settings.GEE_SERVICE_ACCOUNT_KEY:
                 key_file = settings.GEE_SERVICE_ACCOUNT_KEY
 
@@ -84,24 +115,27 @@ class GeeService:
                     backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
                     key_file = os.path.join(backend_dir, key_file)
 
-                # Lê o email do service account do arquivo JSON
-                with open(key_file, 'r') as f:
-                    sa_info = json.load(f)
-                    service_account_email = sa_info.get('client_email')
+                if os.path.exists(key_file):
+                    # Lê o email do service account do arquivo JSON
+                    with open(key_file, 'r') as f:
+                        sa_info = json.load(f)
+                        service_account_email = sa_info.get('client_email')
 
-                credentials = ee.ServiceAccountCredentials(
-                    email=service_account_email,
-                    key_file=key_file
-                )
-                ee.Initialize(
-                    credentials=credentials,
-                    project=settings.GEE_PROJECT_ID or None
-                )
-            else:
-                # Usa autenticação default (interativa ou application default)
-                ee.Initialize(project=settings.GEE_PROJECT_ID or None)
+                    credentials = ee.ServiceAccountCredentials(
+                        email=service_account_email,
+                        key_file=key_file
+                    )
+                    ee.Initialize(
+                        credentials=credentials,
+                        project=settings.GEE_PROJECT_ID or None
+                    )
+                    self._initialized = True
+                    return
 
+            # Método 3: Autenticação default (interativa ou application default)
+            ee.Initialize(project=settings.GEE_PROJECT_ID or None)
             self._initialized = True
+
         except ee.EEException as e:
             # Tenta inicializar sem projeto específico
             try:

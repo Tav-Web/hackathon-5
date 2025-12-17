@@ -50,6 +50,7 @@ dist/
 !package-lock.json
 !tsconfig.json
 !**/tsconfig*.json
+!easypanel.json
 
 # OS
 .DS_Store

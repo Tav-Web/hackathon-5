@@ -10,8 +10,8 @@ from pathlib import Path
 # Adicionar backend ao path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from sqlalchemy import text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy import text, inspect
+from sqlalchemy.exc import OperationalError, ProgrammingError
 
 from app.config import settings
 from app.db.session import engine
@@ -55,21 +55,46 @@ def create_postgis_extension():
 def create_tables():
     """Cria todas as tabelas do banco."""
     print("Criando tabelas...")
+
+    # Verificar se as tabelas principais ja existem
+    inspector = inspect(engine)
+    existing_tables = inspector.get_table_names()
+
+    required_tables = ["satellite_images", "analyses", "gee_analyses"]
+    tables_exist = all(t in existing_tables for t in required_tables)
+
+    if tables_exist:
+        print(f"Tabelas ja existem: {', '.join(existing_tables)}")
+        print("Pulando criacao de tabelas.")
+        return
+
+    # Criar tabelas uma a uma para melhor controle
     try:
-        Base.metadata.create_all(bind=engine)
+        for table in Base.metadata.sorted_tables:
+            try:
+                table.create(bind=engine, checkfirst=True)
+                print(f"  - Tabela '{table.name}' criada/verificada")
+            except ProgrammingError as e:
+                if "already exists" in str(e):
+                    print(f"  - Tabela/indice '{table.name}' ja existe (ok)")
+                else:
+                    raise
         print("Tabelas criadas com sucesso!")
 
-        # Listar tabelas criadas
+    except Exception as e:
+        print(f"ERRO ao criar tabelas: {e}")
+        raise
+
+    # Listar tabelas criadas
+    try:
         with engine.connect() as conn:
             result = conn.execute(text(
                 "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
             ))
             tables = [row[0] for row in result]
             print(f"Tabelas existentes: {', '.join(tables)}")
-
     except Exception as e:
-        print(f"ERRO ao criar tabelas: {e}")
-        raise
+        print(f"Aviso ao listar tabelas: {e}")
 
 
 def init_minio():

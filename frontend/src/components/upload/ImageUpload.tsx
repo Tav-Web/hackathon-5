@@ -1,58 +1,29 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback } from "react";
 import { Upload, X, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
-import { uploadImage } from "@/lib/api";
+import { useAnalysis } from "@/context/AnalysisContext";
 
-interface UploadedImage {
-  id: number;
-  filename: string;
-  type: "before" | "after";
-}
-
-interface ImageUploadProps {
-  onImagesChange?: (images: UploadedImage[]) => void;
-}
-
-export function ImageUpload({ onImagesChange }: ImageUploadProps) {
-  const [images, setImages] = useState<UploadedImage[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [dragActive, setDragActive] = useState(false);
-
-  const updateImages = useCallback(
-    (newImages: UploadedImage[]) => {
-      setImages(newImages);
-      onImagesChange?.(newImages);
-    },
-    [onImagesChange]
-  );
+export function ImageUpload() {
+  const { images, status, uploadImageFile, removeImage } = useAnalysis();
+  const uploading = status === "uploading";
 
   const handleUpload = useCallback(
     async (file: File, type: "before" | "after") => {
-      setUploading(true);
       try {
-        const result = await uploadImage(file);
-        const newImages = [
-          ...images.filter((img) => img.type !== type),
-          { id: result.id, filename: result.filename, type },
-        ];
-        updateImages(newImages);
+        await uploadImageFile(file, type);
         toast.success(`Imagem "${type === "before" ? "Antes" : "Depois"}" enviada com sucesso`);
       } catch {
         toast.error("Erro ao enviar imagem");
-      } finally {
-        setUploading(false);
       }
     },
-    [images, updateImages]
+    [uploadImageFile]
   );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
-      setDragActive(false);
-
       const files = Array.from(e.dataTransfer.files);
       if (files.length > 0) {
         const type = images.some((img) => img.type === "before") ? "after" : "before";
@@ -69,11 +40,6 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
     }
   };
 
-  const removeImage = (type: "before" | "after") => {
-    const newImages = images.filter((img) => img.type !== type);
-    updateImages(newImages);
-  };
-
   const beforeImage = images.find((img) => img.type === "before");
   const afterImage = images.find((img) => img.type === "after");
 
@@ -83,22 +49,12 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
 
       {/* Drop Zone */}
       <div
-        className={`border-2 border-dashed rounded-lg p-4 text-center transition-colors ${
-          dragActive
-            ? "border-blue-500 bg-blue-500/10"
-            : "border-gray-700 hover:border-gray-600"
-        }`}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setDragActive(true);
-        }}
-        onDragLeave={() => setDragActive(false)}
+        className="border-2 border-dashed rounded-lg p-4 text-center transition-colors border-gray-700 hover:border-gray-600"
+        onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
       >
         <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-        <p className="text-sm text-gray-400">
-          Arraste imagens aqui ou use os botões abaixo
-        </p>
+        <p className="text-sm text-gray-400">Arraste imagens aqui ou use os botões abaixo</p>
       </div>
 
       {/* Image Slots */}
@@ -108,7 +64,7 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
           <label className="text-sm font-medium text-gray-300">Antes</label>
           {beforeImage ? (
             <div className="relative bg-gray-800 rounded-lg p-3">
-              <ImageIcon className="h-6 w-6 text-blue-500 mb-1" />
+              <ImageIcon className="h-6 w-6 text-green-500 mb-1" />
               <p className="text-xs text-gray-400 truncate">{beforeImage.filename}</p>
               <button
                 onClick={() => removeImage("before")}
@@ -139,7 +95,7 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
           <label className="text-sm font-medium text-gray-300">Depois</label>
           {afterImage ? (
             <div className="relative bg-gray-800 rounded-lg p-3">
-              <ImageIcon className="h-6 w-6 text-green-500 mb-1" />
+              <ImageIcon className="h-6 w-6 text-blue-500 mb-1" />
               <p className="text-xs text-gray-400 truncate">{afterImage.filename}</p>
               <button
                 onClick={() => removeImage("after")}
@@ -166,11 +122,7 @@ export function ImageUpload({ onImagesChange }: ImageUploadProps) {
         </div>
       </div>
 
-      {uploading && (
-        <p className="text-sm text-blue-400 text-center">Enviando...</p>
-      )}
+      {uploading && <p className="text-sm text-blue-400 text-center">Enviando...</p>}
     </div>
   );
 }
-
-export type { UploadedImage };

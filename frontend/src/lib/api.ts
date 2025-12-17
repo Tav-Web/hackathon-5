@@ -77,6 +77,31 @@ export interface ChangeSummary {
   by_type: Record<string, number>;
 }
 
+// Satellite API Types
+export interface Bounds {
+  min_lon: number;
+  min_lat: number;
+  max_lon: number;
+  max_lat: number;
+}
+
+export interface SatelliteDownloadRequest {
+  bounds: Bounds;
+  date_before: string;
+  date_after: string;
+  date_range_days?: number;
+}
+
+export interface SatelliteDownloadStatus {
+  task_id: string;
+  status: "pending" | "downloading" | "completed" | "failed";
+  message?: string;
+  before_id?: string;
+  after_id?: string;
+  before_date?: string;
+  after_date?: string;
+}
+
 // API Functions
 export async function uploadImage(file: File): Promise<{ id: number; filename: string }> {
   const formData = new FormData();
@@ -114,7 +139,7 @@ export async function compareImages(
   return response.data;
 }
 
-export async function getAnalysisStatus(analysisId: number): Promise<AnalysisStatus> {
+export async function getAnalysisStatus(analysisId: string | number): Promise<AnalysisStatus> {
   const response = await api.get(`/analysis/${analysisId}`);
   return response.data;
 }
@@ -130,12 +155,54 @@ export async function getAnalysisResult(analysisId: number): Promise<{
   return response.data;
 }
 
-export async function getChanges(analysisId: number): Promise<GeoJSONFeatureCollection> {
+export async function getChanges(analysisId: string | number): Promise<GeoJSONFeatureCollection> {
   const response = await api.get(`/changes/${analysisId}`);
   return response.data;
 }
 
-export async function getChangesSummary(analysisId: number): Promise<ChangeSummary> {
+export async function getChangesSummary(analysisId: string | number): Promise<ChangeSummary> {
   const response = await api.get(`/changes/${analysisId}/summary`);
+  return response.data;
+}
+
+// Satellite API Functions
+export async function downloadSatelliteImages(
+  data: SatelliteDownloadRequest
+): Promise<SatelliteDownloadStatus> {
+  const response = await api.post("/satellite/download", data);
+  return response.data;
+}
+
+export async function getSatelliteDownloadStatus(taskId: string): Promise<SatelliteDownloadStatus> {
+  const response = await api.get(`/satellite/download/${taskId}`);
+  return response.data;
+}
+
+// Alias for startAnalysis (used by context)
+export interface AnalysisRequest {
+  image_before_id: string;
+  image_after_id: string;
+  threshold?: number;
+  min_area?: number;
+}
+
+export interface AnalysisResponse {
+  id: string;
+  image_before_id: string;
+  image_after_id: string;
+  status: string;
+  created_at: string;
+  completed_at?: string;
+  total_changes: number;
+  total_area_changed: number;
+}
+
+export async function startAnalysis(data: AnalysisRequest): Promise<AnalysisResponse> {
+  const response = await api.post("/analysis/compare", {
+    image_before_id: data.image_before_id,
+    image_after_id: data.image_after_id,
+    threshold: data.threshold || 0.3,
+    min_area: data.min_area || 100,
+  });
   return response.data;
 }

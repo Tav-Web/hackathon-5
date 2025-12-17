@@ -44,6 +44,13 @@ dist/
 .env.*.local
 !.env.example
 
+# GEE Credentials
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!**/tsconfig*.json
+
 # OS
 .DS_Store
 Thumbs.db

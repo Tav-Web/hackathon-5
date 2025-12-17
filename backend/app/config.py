@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = 500 * 1024 * 1024  # 500MB
     UPLOAD_TEMP_DIR: str = "/tmp/hackathon_uploads"
 
+    # Google Earth Engine
+    GEE_PROJECT_ID: str = "ee-hackathon5"
+    GEE_SERVICE_ACCOUNT_KEY: str = ""  # Path to service account JSON or empty for personal auth
+
+    # OpenRouter (LLM)
+    OPENROUTER_API_KEY: str = ""
+    OPENROUTER_MODEL: str = "google/gemini-3-flash-preview"
+
     class Config:
         env_file = ".env"
         case_sensitive = True

@@ -7,7 +7,6 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from app.api.v1.endpoints.images import images_db
 from app.core.satellite import EarthEngineService
 from app.core.satellite.mock_satellite import MockSatelliteService
 
@@ -65,6 +64,9 @@ class SatelliteDownloadStatus(BaseModel):
 
 # Task storage
 download_tasks: dict[str, dict] = {}
+
+# Local storage for satellite images metadata (not using SQLAlchemy for demo simplicity)
+images_db: dict[str, dict] = {}
 
 
 async def download_satellite_images_task(task_id: str, request: SatelliteDownloadRequest):

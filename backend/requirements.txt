@@ -38,12 +38,9 @@ uuid6>=2024.1.12
 
 # Google Earth Engine
 earthengine-api>=0.1.390
-google-auth>=2.0.0
-
-# AI/LLM Analysis (opcional)
-anthropic>=0.39.0
 google-auth>=2.20.0
 
-# LLM (OpenRouter)
+# AI/LLM Analysis
+anthropic>=0.39.0
 openai>=1.0.0
 httpx>=0.25.0

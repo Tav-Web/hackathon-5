@@ -1,7 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import analysis, changes, images, satellite
-from app.api.v1.endpoints import analysis, changes, chat, gee, images
+from app.api.v1.endpoints import analysis, changes, chat, gee, images, satellite
 
 api_router = APIRouter()
 

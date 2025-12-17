@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import type { GeoJSONFeatureCollection, Bounds } from "@/lib/api";
 import "leaflet/dist/leaflet.css";
 
@@ -11,7 +11,6 @@ interface MapViewProps {
   isSelectingBounds?: boolean;
   selectedBounds?: Bounds | null;
   onBoundsSelected?: (bounds: Bounds) => void;
-  onStartSelecting?: () => void;
 }
 
 // Cores por tipo de mudança
@@ -33,13 +32,10 @@ export default function MapView({
   isSelectingBounds = false,
   selectedBounds,
   onBoundsSelected,
-  onStartSelecting,
 }: MapViewProps) {
-  const [currentCoords, setCurrentCoords] = useState<{
-    lat: number;
-    lng: number;
-  } | null>(null);
   const mapRef = useRef<L.Map | null>(null);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const leafletRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const selectionRectRef = useRef<L.Rectangle | null>(null);
   const geoJsonLayerRef = useRef<L.GeoJSON | null>(null);
@@ -55,7 +51,9 @@ export default function MapView({
 
     // Importar Leaflet dinamicamente
     const initMap = async () => {
-      const L = (await import("leaflet")).default;
+      const leaflet = await import("leaflet");
+      const L = leaflet.default;
+      leafletRef.current = L;
 
       // Corrigir ícones do Leaflet
       delete (L.Icon.Default.prototype as unknown as { _getIconUrl?: unknown })
@@ -89,11 +87,6 @@ export default function MapView({
           }
         ).addTo(map);
 
-        // Rastrear coordenadas do mouse
-        map.on("mousemove", (e: L.LeafletMouseEvent) => {
-          setCurrentCoords({ lat: e.latlng.lat, lng: e.latlng.lng });
-        });
-
         mapRef.current = map;
       }
     };
@@ -118,10 +111,10 @@ export default function MapView({
 
   // Gerenciar seleção de bounds
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !leafletRef.current) return;
 
     const map = mapRef.current;
-    const L = require("leaflet");
+    const L = leafletRef.current;
 
     if (isSelectingBounds) {
       // Habilitar modo de seleção
@@ -215,9 +208,9 @@ export default function MapView({
 
   // Mostrar bounds selecionados
   useEffect(() => {
-    if (!mapRef.current || !selectedBounds) return;
+    if (!mapRef.current || !selectedBounds || !leafletRef.current) return;
 
-    const L = require("leaflet");
+    const L = leafletRef.current;
     const map = mapRef.current;
 
     // Remover retângulo anterior
@@ -244,9 +237,9 @@ export default function MapView({
 
   // Atualizar GeoJSON quando changes mudar
   useEffect(() => {
-    if (!mapRef.current) return;
+    if (!mapRef.current || !leafletRef.current) return;
 
-    const L = require("leaflet");
+    const L = leafletRef.current;
     const map = mapRef.current;
 
     // Remover layer anterior

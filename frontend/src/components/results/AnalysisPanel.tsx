@@ -55,7 +55,7 @@ export function AnalysisPanel() {
 
       {!hasImages && (
         <p className="text-xs text-gray-500 text-center">
-          Envie as imagens "antes" e "depois" para iniciar
+          Envie as imagens &quot;antes&quot; e &quot;depois&quot; para iniciar
         </p>
       )}
 

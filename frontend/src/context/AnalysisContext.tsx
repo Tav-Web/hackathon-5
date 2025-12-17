@@ -72,7 +72,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         status: "idle",
         images: [
           ...prev.images.filter((img) => img.type !== type),
-          { id: result.id, filename: result.filename, type },
+          { id: String(result.id), filename: result.filename, type },
         ],
       }));
     } catch (err) {

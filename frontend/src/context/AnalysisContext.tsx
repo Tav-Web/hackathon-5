@@ -9,6 +9,7 @@ import {
   getChangesSummary,
   downloadSatelliteImages,
   getSatelliteDownloadStatus,
+  analyzeSatelliteImages,
   GeoJSONFeatureCollection,
   ChangeSummary,
   Bounds,
@@ -193,7 +194,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   );
 
   const startDetection = useCallback(
-    async (threshold = 0.3, minArea = 100) => {
+    async (threshold = 0.15, minArea = 100) => {
       const beforeImage = state.images.find((img) => img.type === "before");
       const afterImage = state.images.find((img) => img.type === "after");
 
@@ -204,7 +205,57 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       setState((prev) => ({ ...prev, status: "analyzing", progress: 0, error: null }));
 
       try {
-        // Iniciar análise
+        // Check if images are from satellite (synchronous analysis)
+        const isSatellite = beforeImage.satellite || afterImage.satellite;
+
+        if (isSatellite) {
+          // Use synchronous satellite analysis
+          setState((prev) => ({ ...prev, progress: 30 }));
+
+          const result = await analyzeSatelliteImages({
+            image_before_id: beforeImage.id,
+            image_after_id: afterImage.id,
+            threshold,
+            min_area: minArea,
+          });
+
+          // Convert changes array to GeoJSON FeatureCollection
+          const changesGeoJSON: GeoJSONFeatureCollection = {
+            type: "FeatureCollection",
+            features: result.changes.map((change) => ({
+              type: "Feature" as const,
+              id: change.id || String(Math.random()),
+              properties: change.properties || {},
+              geometry: change.geometry || { type: "Polygon", coordinates: [] },
+            })),
+          };
+
+          // Create summary from results
+          const summary: ChangeSummary = {
+            analysis_id: 0,
+            total_changes: result.total_changes,
+            total_area: result.total_area_changed,
+            by_type: {},
+          };
+
+          // Count by type
+          result.changes.forEach((change) => {
+            const type = change.properties?.type || "unknown";
+            summary.by_type[type] = (summary.by_type[type] || 0) + 1;
+          });
+
+          setState((prev) => ({
+            ...prev,
+            analysisId: result.id,
+            status: "completed",
+            progress: 100,
+            changes: changesGeoJSON,
+            summary,
+          }));
+          return;
+        }
+
+        // Non-satellite: use async analysis with polling
         const analysis = await startAnalysis({
           image_before_id: beforeImage.id,
           image_after_id: afterImage.id,
@@ -348,55 +399,51 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           throw new Error("Não foi possível obter as imagens de satélite");
         }
 
-        // Etapa 2: Executar análise de mudanças
+        // Etapa 2: Executar análise de mudanças (síncrona para imagens de satélite)
         setState((prev) => ({ ...prev, status: "analyzing", progress: 45 }));
 
-        const analysis = await startAnalysis({
+        const result = await analyzeSatelliteImages({
           image_before_id: beforeImageId,
           image_after_id: afterImageId,
           threshold,
           min_area: minArea,
         });
 
-        setState((prev) => ({ ...prev, analysisId: analysis.id, progress: 50 }));
+        setState((prev) => ({ ...prev, progress: 80 }));
 
-        // Polling para verificar status da análise
-        let analysisAttempts = 0;
-        const maxAnalysisAttempts = 60;
+        // Convert changes array to GeoJSON FeatureCollection
+        const changesGeoJSON: GeoJSONFeatureCollection = {
+          type: "FeatureCollection",
+          features: result.changes.map((change) => ({
+            type: "Feature" as const,
+            id: change.id || String(Math.random()),
+            properties: change.properties || {},
+            geometry: change.geometry || { type: "Polygon", coordinates: [] },
+          })),
+        };
 
-        while (analysisAttempts < maxAnalysisAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 500));
-          const analysisStatus = await getAnalysisStatus(analysis.id);
+        // Create summary from results
+        const summary: ChangeSummary = {
+          analysis_id: 0,
+          total_changes: result.total_changes,
+          total_area: result.total_area_changed,
+          by_type: {},
+        };
 
-          // Atualizar progresso (50-90% para análise)
-          const analysisProgress = 50 + Math.floor(analysisStatus.progress * 0.4);
-          setState((prev) => ({ ...prev, progress: analysisProgress }));
+        // Count by type
+        result.changes.forEach((change) => {
+          const type = change.properties?.type || "unknown";
+          summary.by_type[type] = (summary.by_type[type] || 0) + 1;
+        });
 
-          if (analysisStatus.status === "completed") {
-            // Buscar resultados
-            const [changesResult, summaryResult] = await Promise.all([
-              getChanges(analysis.id),
-              getChangesSummary(analysis.id),
-            ]);
-
-            setState((prev) => ({
-              ...prev,
-              status: "completed",
-              progress: 100,
-              changes: changesResult,
-              summary: summaryResult,
-            }));
-            return;
-          }
-
-          if (analysisStatus.status === "failed") {
-            throw new Error(analysisStatus.message || "Análise falhou");
-          }
-
-          analysisAttempts++;
-        }
-
-        throw new Error("Timeout: análise demorou muito");
+        setState((prev) => ({
+          ...prev,
+          analysisId: result.id,
+          status: "completed",
+          progress: 100,
+          changes: changesGeoJSON,
+          summary,
+        }));
       } catch (err) {
         setState((prev) => ({
           ...prev,

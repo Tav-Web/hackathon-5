@@ -15,6 +15,9 @@ from app.services.storage_service import get_image_path, upload_file
 
 router = APIRouter()
 
+# In-memory storage for satellite images (used by satellite endpoint)
+images_db: dict[str, dict] = {}
+
 ALLOWED_EXTENSIONS = {".tif", ".tiff", ".png", ".jpg", ".jpeg"}
 ALLOWED_CONTENT_TYPES = {
     "image/tiff",

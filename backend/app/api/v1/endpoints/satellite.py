@@ -185,6 +185,71 @@ async def get_download_status(task_id: str):
     return SatelliteDownloadStatus(**download_tasks[task_id])
 
 
+class SatelliteAnalyzeRequest(BaseModel):
+    """Request to analyze satellite images."""
+    image_before_id: str
+    image_after_id: str
+    threshold: float = Field(default=0.15, ge=0.01, le=1.0)
+    min_area: int = Field(default=100, ge=1)
+
+
+class SatelliteAnalyzeResponse(BaseModel):
+    """Response from satellite image analysis."""
+    id: str
+    status: str
+    total_changes: int
+    total_area_changed: float
+    changes: list[dict]
+
+
+@router.post("/analyze", response_model=SatelliteAnalyzeResponse)
+async def analyze_satellite_images(request: SatelliteAnalyzeRequest):
+    """
+    Analyze changes between two satellite images (using UUID string IDs).
+    This endpoint is for satellite images stored in memory from /satellite/download.
+    """
+    import uuid as uuid_module
+    from app.core.detection.change_detector import detect_changes
+
+    # Get images from in-memory storage
+    if request.image_before_id not in images_db:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Imagem 'antes' não encontrada: {request.image_before_id}"
+        )
+    if request.image_after_id not in images_db:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Imagem 'depois' não encontrada: {request.image_after_id}"
+        )
+
+    before_image = images_db[request.image_before_id]
+    after_image = images_db[request.image_after_id]
+
+    # Run change detection
+    try:
+        changes = await detect_changes(
+            image_before_path=before_image["filepath"],
+            image_after_path=after_image["filepath"],
+            threshold=request.threshold,
+            min_area=request.min_area,
+        )
+
+        # Calculate totals
+        total_area = sum(c.get("properties", {}).get("area", 0) for c in changes)
+
+        return SatelliteAnalyzeResponse(
+            id=str(uuid_module.uuid4()),
+            status="completed",
+            total_changes=len(changes),
+            total_area_changed=total_area,
+            changes=changes,
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na análise: {str(e)}")
+
+
 @router.get("/availability")
 async def check_availability(
     min_lon: float,

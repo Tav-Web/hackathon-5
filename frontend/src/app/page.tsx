@@ -1,8 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import dynamic from "next/dynamic";
 import { ImageUpload } from "@/components/upload/ImageUpload";
 import { AnalysisPanel } from "@/components/results/AnalysisPanel";
+import { SatellitePanel } from "@/components/satellite/SatellitePanel";
+import { useAnalysis } from "@/context/AnalysisContext";
 
 // Carregar mapa dinamicamente (SSR disabled para Leaflet)
 const MapView = dynamic(() => import("@/components/map/MapView"), {
@@ -14,7 +17,13 @@ const MapView = dynamic(() => import("@/components/map/MapView"), {
   ),
 });
 
+type Tab = "satellite" | "upload";
+
 export default function Home() {
+  const { changes, selectedBounds, isSelectingBounds, setSelectedBounds, setIsSelectingBounds } =
+    useAnalysis();
+  const [activeTab, setActiveTab] = useState<Tab>("satellite");
+
   return (
     <main className="min-h-screen flex flex-col">
       {/* Header */}
@@ -23,23 +32,65 @@ export default function Home() {
           <h1 className="text-xl font-bold text-white">
             Detector de Mudanças em Imagens de Satélite
           </h1>
-          <span className="text-sm text-gray-400">Hackathon 5</span>
+          <span className="text-sm text-gray-400">TAV Hack 2025</span>
         </div>
       </header>
 
       {/* Main Content */}
       <div className="flex-1 flex">
         {/* Sidebar */}
-        <aside className="w-80 bg-gray-900 border-r border-gray-800 p-4 overflow-y-auto">
-          <div className="space-y-6">
-            <ImageUpload />
-            <AnalysisPanel />
+        <aside className="w-96 bg-gray-900 border-r border-gray-800 flex flex-col">
+          {/* Tabs */}
+          <div className="flex border-b border-gray-800">
+            <button
+              onClick={() => setActiveTab("satellite")}
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                activeTab === "satellite"
+                  ? "text-blue-400 border-b-2 border-blue-400"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Satélite
+            </button>
+            <button
+              onClick={() => setActiveTab("upload")}
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                activeTab === "upload"
+                  ? "text-blue-400 border-b-2 border-blue-400"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Upload Manual
+            </button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto p-4">
+            <div className="space-y-6">
+              {activeTab === "satellite" ? <SatellitePanel /> : <ImageUpload />}
+              <AnalysisPanel />
+            </div>
           </div>
         </aside>
 
         {/* Map */}
         <div className="flex-1 relative">
-          <MapView />
+          <MapView
+            changes={changes}
+            isSelectingBounds={isSelectingBounds}
+            selectedBounds={selectedBounds}
+            onBoundsSelected={(bounds) => {
+              setSelectedBounds(bounds);
+              setIsSelectingBounds(false);
+            }}
+          />
+
+          {/* Instrução de seleção */}
+          {isSelectingBounds && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-blue-600 text-white px-4 py-2 rounded-lg shadow-lg z-[1000]">
+              Clique e arraste para selecionar a área de análise
+            </div>
+          )}
         </div>
       </div>
     </main>

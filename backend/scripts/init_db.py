@@ -68,31 +68,42 @@ def create_tables():
         print("Pulando criacao de tabelas.")
         return
 
-    # Criar tabelas uma a uma para melhor controle
-    try:
-        for table in Base.metadata.sorted_tables:
-            try:
-                table.create(bind=engine, checkfirst=True)
-                print(f"  - Tabela '{table.name}' criada/verificada")
-            except ProgrammingError as e:
-                if "already exists" in str(e):
-                    print(f"  - Tabela/indice '{table.name}' ja existe (ok)")
-                else:
-                    raise
-        print("Tabelas criadas com sucesso!")
+    # Limpar indices orfaos que possam existir de execucoes anteriores
+    print("Limpando indices orfaos...")
+    orphan_indexes = [
+        "idx_satellite_images_bounds",
+        "idx_satellite_images_captured_at",
+        "idx_analyses_status",
+        "idx_gee_analyses_status",
+    ]
 
+    with engine.connect() as conn:
+        for idx_name in orphan_indexes:
+            try:
+                conn.execute(text(f"DROP INDEX IF EXISTS {idx_name}"))
+                conn.commit()
+            except Exception:
+                pass  # Ignora se nao existir
+
+    # Criar todas as tabelas de uma vez (SQLAlchemy resolve dependencias)
+    try:
+        Base.metadata.create_all(bind=engine, checkfirst=True)
+        print("Tabelas criadas com sucesso!")
+    except ProgrammingError as e:
+        if "already exists" in str(e):
+            print(f"Aviso: Alguns objetos ja existem (ignorando)")
+        else:
+            print(f"ERRO ao criar tabelas: {e}")
+            raise
     except Exception as e:
         print(f"ERRO ao criar tabelas: {e}")
         raise
 
     # Listar tabelas criadas
     try:
-        with engine.connect() as conn:
-            result = conn.execute(text(
-                "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
-            ))
-            tables = [row[0] for row in result]
-            print(f"Tabelas existentes: {', '.join(tables)}")
+        inspector = inspect(engine)
+        tables = inspector.get_table_names()
+        print(f"Tabelas existentes: {', '.join(tables)}")
     except Exception as e:
         print(f"Aviso ao listar tabelas: {e}")
 

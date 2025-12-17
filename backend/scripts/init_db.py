@@ -114,6 +114,7 @@ def init_minio():
 
     try:
         import boto3
+        from botocore.config import Config
         from botocore.exceptions import ClientError
 
         s3 = boto3.client(
@@ -121,6 +122,7 @@ def init_minio():
             endpoint_url=f"http://{settings.MINIO_ENDPOINT}",
             aws_access_key_id=settings.MINIO_ROOT_USER,
             aws_secret_access_key=settings.MINIO_ROOT_PASSWORD,
+            config=Config(s3={'addressing_style': 'path'}),
         )
 
         bucket_name = settings.MINIO_BUCKET

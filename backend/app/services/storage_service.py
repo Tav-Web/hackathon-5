@@ -46,7 +46,10 @@ def get_s3_client() -> "S3Client":
             endpoint_url=endpoint_url,
             aws_access_key_id=settings.MINIO_ROOT_USER,
             aws_secret_access_key=settings.MINIO_ROOT_PASSWORD,
-            config=Config(signature_version="s3v4"),
+            config=Config(
+                signature_version="s3v4",
+                s3={'addressing_style': 'path'}
+            ),
             region_name="us-east-1",
         )
         return client

@@ -4,7 +4,7 @@ from pydantic import BaseModel
 
 
 class ImageBase(BaseModel):
-    filename: str
+    name: str | None = None
     capture_date: datetime | None = None
 
 
@@ -12,13 +12,18 @@ class ImageCreate(ImageBase):
     pass
 
 
-class ImageResponse(ImageBase):
-    id: str
-    filepath: str
+class ImageResponse(BaseModel):
+    id: int
+    name: str
+    original_filename: str
     width: int
     height: int
+    file_size: int
     bounds: dict | None = None
+    center_lat: float | None = None
+    center_lon: float | None = None
     crs: str | None = None
+    status: str
     created_at: datetime
 
     class Config:
@@ -26,6 +31,17 @@ class ImageResponse(ImageBase):
 
 
 class ImageUploadResponse(BaseModel):
-    id: str
+    id: int
     filename: str
     message: str
+
+
+class ImageListResponse(BaseModel):
+    id: int
+    name: str
+    original_filename: str
+    status: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

@@ -8,7 +8,7 @@ celery_app = Celery(
     "hackathon",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
-    include=["app.tasks.analysis_task"],
+    include=["app.tasks.analysis_task", "app.tasks.gee_task"],
 )
 
 celery_app.conf.update(

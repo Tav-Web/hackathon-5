@@ -42,3 +42,8 @@ google-auth>=2.0.0
 
 # AI/LLM Analysis (opcional)
 anthropic>=0.39.0
+google-auth>=2.20.0
+
+# LLM (OpenRouter)
+openai>=1.0.0
+httpx>=0.25.0

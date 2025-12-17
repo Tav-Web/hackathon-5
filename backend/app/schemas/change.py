@@ -21,7 +21,7 @@ class ChangeFeature(BaseModel):
     area: float
     centroid: tuple[float, float]
     confidence: float
-    geometry: dict[str, Any]  # GeoJSON geometry
+    geometry: dict[str, Any]
 
 
 class ChangesGeoJSON(BaseModel):
@@ -31,7 +31,7 @@ class ChangesGeoJSON(BaseModel):
 
 
 class ChangeSummary(BaseModel):
-    analysis_id: str
+    analysis_id: int
     total_changes: int
     total_area: float
     by_type: dict[str, int]

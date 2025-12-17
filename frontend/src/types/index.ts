@@ -1,11 +1,11 @@
 export interface UploadedImage {
-  id: string;
+  id: number;
   filename: string;
   type: "before" | "after";
 }
 
 export interface AnalysisResult {
-  id: string;
+  id: number;
   status: "pending" | "processing" | "completed" | "failed";
   totalChanges: number;
   totalArea: number;
@@ -51,9 +51,9 @@ export interface GeoJSONFeatureCollection {
   type: "FeatureCollection";
   features: GeoJSONFeature[];
   metadata?: {
-    analysis_id: string;
+    analysis_id: number;
     total_changes: number;
-    image_before_id: string;
-    image_after_id: string;
+    image_before_id: number;
+    image_after_id: number;
   };
 }

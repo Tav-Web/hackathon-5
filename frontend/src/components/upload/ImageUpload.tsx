@@ -6,31 +6,47 @@ import { toast } from "sonner";
 import { uploadImage } from "@/lib/api";
 
 interface UploadedImage {
-  id: string;
+  id: number;
   filename: string;
   type: "before" | "after";
 }
 
-export function ImageUpload() {
+interface ImageUploadProps {
+  onImagesChange?: (images: UploadedImage[]) => void;
+}
+
+export function ImageUpload({ onImagesChange }: ImageUploadProps) {
   const [images, setImages] = useState<UploadedImage[]>([]);
   const [uploading, setUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
 
-  const handleUpload = useCallback(async (file: File, type: "before" | "after") => {
-    setUploading(true);
-    try {
-      const result = await uploadImage(file);
-      setImages((prev) => [
-        ...prev.filter((img) => img.type !== type),
-        { id: result.id, filename: result.filename, type },
-      ]);
-      toast.success(`Imagem "${type === "before" ? "Antes" : "Depois"}" enviada com sucesso`);
-    } catch {
-      toast.error("Erro ao enviar imagem");
-    } finally {
-      setUploading(false);
-    }
-  }, []);
+  const updateImages = useCallback(
+    (newImages: UploadedImage[]) => {
+      setImages(newImages);
+      onImagesChange?.(newImages);
+    },
+    [onImagesChange]
+  );
+
+  const handleUpload = useCallback(
+    async (file: File, type: "before" | "after") => {
+      setUploading(true);
+      try {
+        const result = await uploadImage(file);
+        const newImages = [
+          ...images.filter((img) => img.type !== type),
+          { id: result.id, filename: result.filename, type },
+        ];
+        updateImages(newImages);
+        toast.success(`Imagem "${type === "before" ? "Antes" : "Depois"}" enviada com sucesso`);
+      } catch {
+        toast.error("Erro ao enviar imagem");
+      } finally {
+        setUploading(false);
+      }
+    },
+    [images, updateImages]
+  );
 
   const handleDrop = useCallback(
     (e: React.DragEvent) => {
@@ -54,7 +70,8 @@ export function ImageUpload() {
   };
 
   const removeImage = (type: "before" | "after") => {
-    setImages((prev) => prev.filter((img) => img.type !== type));
+    const newImages = images.filter((img) => img.type !== type);
+    updateImages(newImages);
   };
 
   const beforeImage = images.find((img) => img.type === "before");
@@ -91,7 +108,7 @@ export function ImageUpload() {
           <label className="text-sm font-medium text-gray-300">Antes</label>
           {beforeImage ? (
             <div className="relative bg-gray-800 rounded-lg p-3">
-              <ImageIcon className="h-6 w-6 text-green-500 mb-1" />
+              <ImageIcon className="h-6 w-6 text-blue-500 mb-1" />
               <p className="text-xs text-gray-400 truncate">{beforeImage.filename}</p>
               <button
                 onClick={() => removeImage("before")}
@@ -122,7 +139,7 @@ export function ImageUpload() {
           <label className="text-sm font-medium text-gray-300">Depois</label>
           {afterImage ? (
             <div className="relative bg-gray-800 rounded-lg p-3">
-              <ImageIcon className="h-6 w-6 text-blue-500 mb-1" />
+              <ImageIcon className="h-6 w-6 text-green-500 mb-1" />
               <p className="text-xs text-gray-400 truncate">{afterImage.filename}</p>
               <button
                 onClick={() => removeImage("after")}
@@ -155,3 +172,5 @@ export function ImageUpload() {
     </div>
   );
 }
+
+export type { UploadedImage };

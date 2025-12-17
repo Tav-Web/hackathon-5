@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     # Upload Configuration
     MAX_UPLOAD_SIZE: int = 500 * 1024 * 1024  # 500MB
     UPLOAD_TEMP_DIR: str = "/tmp/hackathon_uploads"
+    UPLOAD_DIR: str = "/tmp/hackathon_uploads"  # Alias for satellite service
 
     # Google Earth Engine
     GEE_PROJECT_ID: str = "ee-hackathon5"

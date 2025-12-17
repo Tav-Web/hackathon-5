@@ -197,12 +197,38 @@ export interface AnalysisResponse {
   total_area_changed: number;
 }
 
-export async function startAnalysis(data: AnalysisRequest): Promise<AnalysisResponse> {
-  const response = await api.post("/analysis/compare", {
+// Satellite Analysis Response (from /satellite/analyze)
+export interface SatelliteAnalysisResponse {
+  id: string;
+  status: string;
+  total_changes: number;
+  total_area_changed: number;
+  changes: GeoJSONFeature[];
+}
+
+// Satellite analysis (synchronous - returns results immediately)
+export async function analyzeSatelliteImages(data: AnalysisRequest): Promise<SatelliteAnalysisResponse> {
+  const response = await api.post("/satellite/analyze", {
     image_before_id: data.image_before_id,
     image_after_id: data.image_after_id,
-    threshold: data.threshold || 0.3,
+    threshold: data.threshold || 0.15,
     min_area: data.min_area || 100,
   });
   return response.data;
+}
+
+export async function startAnalysis(data: AnalysisRequest): Promise<AnalysisResponse> {
+  // Use satellite endpoint for string IDs (UUIDs from satellite download)
+  const satResponse = await analyzeSatelliteImages(data);
+
+  // Map satellite response to expected AnalysisResponse format
+  return {
+    id: satResponse.id,
+    image_before_id: data.image_before_id,
+    image_after_id: data.image_after_id,
+    status: satResponse.status,
+    created_at: new Date().toISOString(),
+    total_changes: satResponse.total_changes,
+    total_area_changed: satResponse.total_area_changed,
+  };
 }

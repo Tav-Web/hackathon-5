@@ -12,17 +12,19 @@ class AnalysisStatus(str, Enum):
 
 
 class AnalysisCreate(BaseModel):
-    image_before_id: str
-    image_after_id: str
+    image_before_id: int
+    image_after_id: int
     threshold: float = 0.3
-    min_area: int = 100
+    min_area: float = 100.0
 
 
 class AnalysisResponse(BaseModel):
-    id: str
-    image_before_id: str
-    image_after_id: str
+    id: int
+    image_before_id: int
+    image_after_id: int
     status: AnalysisStatus
+    threshold: float
+    min_area: float
     created_at: datetime
     completed_at: datetime | None = None
     total_changes: int = 0
@@ -33,7 +35,18 @@ class AnalysisResponse(BaseModel):
 
 
 class AnalysisStatusResponse(BaseModel):
-    id: str
+    id: int
     status: AnalysisStatus
     progress: int = 0
     message: str | None = None
+
+
+class AnalysisResultResponse(BaseModel):
+    id: int
+    status: AnalysisStatus
+    total_changes: int
+    total_area_changed: float
+    results_geojson: dict | None = None
+
+    class Config:
+        from_attributes = True

@@ -123,6 +123,7 @@ def init_minio():
             aws_access_key_id=settings.MINIO_ROOT_USER,
             aws_secret_access_key=settings.MINIO_ROOT_PASSWORD,
             config=Config(s3={'addressing_style': 'path'}),
+            region_name='us-east-1',
         )
 
         bucket_name = settings.MINIO_BUCKET

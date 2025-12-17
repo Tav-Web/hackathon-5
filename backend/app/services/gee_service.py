@@ -71,12 +71,27 @@ class GeeService:
         if self._initialized:
             return
 
+        import json
+        import os
+
         try:
             # Tenta usar service account se configurado
             if settings.GEE_SERVICE_ACCOUNT_KEY:
+                key_file = settings.GEE_SERVICE_ACCOUNT_KEY
+
+                # Se for caminho relativo, usa o diretório do backend
+                if not os.path.isabs(key_file):
+                    backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+                    key_file = os.path.join(backend_dir, key_file)
+
+                # Lê o email do service account do arquivo JSON
+                with open(key_file, 'r') as f:
+                    sa_info = json.load(f)
+                    service_account_email = sa_info.get('client_email')
+
                 credentials = ee.ServiceAccountCredentials(
-                    email=None,
-                    key_file=settings.GEE_SERVICE_ACCOUNT_KEY
+                    email=service_account_email,
+                    key_file=key_file
                 )
                 ee.Initialize(
                     credentials=credentials,

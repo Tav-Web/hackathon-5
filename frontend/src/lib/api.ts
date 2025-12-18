@@ -85,7 +85,7 @@ export interface Bounds {
   max_lat: number;
 }
 
-export type SatelliteSource = "sentinel" | "planet" | "earth_engine";
+export type SatelliteSource = "earth_engine" | "sentinel";
 
 export interface SatelliteDownloadRequest {
   bounds: Bounds;

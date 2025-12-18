@@ -1,6 +1,6 @@
 """
 Planet Labs integration for high-resolution satellite imagery.
-Uses Planet Developer Trial (free for non-commercial use).
+Uses Planet Education & Research Program (free for academic/research use).
 Resolution: ~3m/pixel (vs 10m for Sentinel-2)
 """
 import os
@@ -40,8 +40,8 @@ class PlanetService:
             if not api_key:
                 raise ValueError(
                     "PLANET_API_KEY not configured. "
-                    "Get a free Developer Trial key at: "
-                    "https://www.planet.com/pulse/announcing-planets-developer-trial-program/"
+                    "Get a free API key via Education & Research Program at: "
+                    "https://www.planet.com/markets/education-and-research/"
                 )
 
             # Planet SDK v3+ uses Session with Auth for authentication
@@ -279,11 +279,11 @@ class PlanetService:
             try:
                 asset = pl.data.get_asset("PSScene", item_id, asset_type)
             except Exception as e:
-                # Check if it's a permission error (Developer Trial limitation)
+                # Check if it's a permission error
                 if "must be one of []" in str(e):
-                    print(f"Planet API permission denied: Developer Trial cannot download images")
+                    print(f"Planet API permission denied for asset type: {asset_type}")
                     raise PermissionError(
-                        "Planet Developer Trial não permite download. Use Earth Engine ou Sentinel."
+                        "Sem permissão para download. Verifique se sua conta Planet tem acesso ao PlanetScope."
                     )
                 # Try alternative asset type
                 asset_type = "ortho_analytic_4b"
@@ -292,7 +292,7 @@ class PlanetService:
                 except Exception as e2:
                     if "must be one of []" in str(e2):
                         raise PermissionError(
-                            "Planet Developer Trial não permite download. Use Earth Engine ou Sentinel."
+                            "Sem permissão para download. Verifique se sua conta Planet tem acesso ao PlanetScope."
                         )
                     raise
 
@@ -373,6 +373,62 @@ class PlanetService:
             return None
 
     @classmethod
+    async def download_thumbnail(
+        cls,
+        item_id: str,
+        output_dir: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Download thumbnail for a Planet image (works with trial/E&R accounts).
+
+        Args:
+            item_id: Planet item ID
+            output_dir: Directory to save the thumbnail
+
+        Returns:
+            Path to downloaded thumbnail or None
+        """
+        import httpx
+
+        api_key = cls.get_api_key()
+        if not api_key:
+            return None
+
+        output_dir = output_dir or getattr(settings, "UPLOAD_DIR", "/tmp/hackathon_uploads")
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+        # Use width=512 for larger thumbnails (max supported without paid account)
+        thumb_url = f"https://tiles.planet.com/data/v1/item-types/PSScene/items/{item_id}/thumb?width=512"
+
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.get(
+                    thumb_url,
+                    auth=(api_key, ""),
+                    timeout=30.0,
+                )
+
+                if resp.status_code == 200:
+                    output_path = Path(output_dir) / f"planet_thumb_{item_id}.png"
+                    output_path.write_bytes(resp.content)
+                    print(f"Downloaded Planet thumbnail: {output_path}")
+                    return str(output_path)
+                else:
+                    print(f"Failed to download thumbnail: {resp.status_code}")
+                    return None
+
+            except Exception as e:
+                print(f"Error downloading thumbnail: {e}")
+                return None
+
+    @classmethod
+    def get_api_key(cls) -> Optional[str]:
+        """Get Planet API key from environment."""
+        return os.getenv("PLANET_API_KEY") or getattr(
+            settings, "PLANET_API_KEY", None
+        )
+
+    @classmethod
     async def download_closest_image(
         cls,
         bounds: tuple[float, float, float, float],
@@ -383,6 +439,7 @@ class PlanetService:
     ) -> Optional[dict]:
         """
         Download the image closest to a target date.
+        Uses thumbnails (256x256) which work with trial/E&R accounts.
 
         Args:
             bounds: (min_lon, min_lat, max_lon, max_lat)
@@ -395,7 +452,6 @@ class PlanetService:
             dict with image info and filepath, or None if failed
         """
         try:
-            pl = cls.get_client()
             min_lon, min_lat, max_lon, max_lat = bounds
 
             # Find closest image
@@ -407,60 +463,15 @@ class PlanetService:
                 return None
 
             item_id = best_image["id"]
-            print(f"Downloading Planet image: {item_id}")
+            print(f"Found Planet image: {item_id}")
 
-            # Get asset (ortho_visual for RGB preview)
-            asset_type = "ortho_visual"
-            try:
-                asset = pl.data.get_asset("PSScene", item_id, asset_type)
-            except Exception as e:
-                # Check if it's a permission error (Developer Trial limitation)
-                if "must be one of []" in str(e):
-                    print(f"Planet API permission denied: Developer Trial cannot download images")
-                    raise PermissionError(
-                        "Planet Developer Trial não permite download. Use Earth Engine ou Sentinel."
-                    )
-                # Try alternative asset type
-                asset_type = "ortho_analytic_4b"
-                try:
-                    asset = pl.data.get_asset("PSScene", item_id, asset_type)
-                except Exception as e2:
-                    if "must be one of []" in str(e2):
-                        raise PermissionError(
-                            "Planet Developer Trial não permite download. Use Earth Engine ou Sentinel."
-                        )
-                    raise
-
-            # Activate asset if needed
-            if asset.get("status") != "active":
-                print(f"Activating Planet asset {asset_type}...")
-                pl.data.activate_asset(asset)
-                asset = pl.data.wait_asset(asset, callback=lambda a: print(f"  Status: {a.get('status')}"))
-
-            # Download asset
+            # Download thumbnail (works with all accounts)
             output_dir = output_dir or getattr(settings, "UPLOAD_DIR", "/tmp/hackathon_uploads")
-            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            filepath = await cls.download_thumbnail(item_id, output_dir)
 
-            print(f"Downloading Planet image to {output_dir}...")
-            downloaded_path = pl.data.download_asset(asset, directory=output_dir)
-
-            # Get image dimensions
-            width = best_image["properties"].get("columns", 0)
-            height = best_image["properties"].get("rows", 0)
-
-            if width == 0 or height == 0:
-                try:
-                    with rasterio.open(downloaded_path) as src:
-                        width = src.width
-                        height = src.height
-                except Exception:
-                    import math
-                    center_lat = (min_lat + max_lat) / 2
-                    cos_lat = math.cos(math.radians(center_lat))
-                    width_km = (max_lon - min_lon) * 111 * cos_lat
-                    height_km = (max_lat - min_lat) * 111
-                    width = int(width_km * 1000 / 3)
-                    height = int(height_km * 1000 / 3)
+            if not filepath:
+                print("Failed to download Planet thumbnail")
+                return None
 
             # Parse acquisition date
             acq_datetime = best_image["datetime"]
@@ -473,7 +484,7 @@ class PlanetService:
 
             return {
                 "id": image_id,
-                "filepath": str(downloaded_path),
+                "filepath": filepath,
                 "date": image_date,
                 "target_date": target_date,
                 "days_from_target": best_image.get("days_from_target", 0),
@@ -490,13 +501,14 @@ class PlanetService:
                     "max_lat": max_lat,
                 },
                 "crs": "EPSG:4326",
-                "width": width,
-                "height": height,
+                "width": 512,  # Thumbnail size
+                "height": 512,
                 "scale": 3,
                 "satellite": "PlanetScope",
                 "cloud_cover": best_image["cloud_cover"],
-                "source": "Planet",
+                "source": "planet",
                 "planet_id": item_id,
+                "note": "Preview 512x512 (conta trial/E&R)",
             }
 
         except Exception as e:

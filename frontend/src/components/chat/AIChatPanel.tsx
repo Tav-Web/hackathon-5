@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -19,6 +18,34 @@ import type {
   AutoAnalysisResponse,
   SuggestedQuestion,
 } from "@/types/gee";
+import {
+  ChatPanelContainer,
+  ChatLoadingContainer,
+  AutoAnalysisCard,
+  AutoAnalysisHeader,
+  AutoAnalysisTitle,
+  AutoAnalysisContent,
+  AnalysisSummary,
+  AnalysisDetail,
+  RecommendationsSection,
+  RecommendationsTitle,
+  RecommendationsList,
+  SuggestionsContainer,
+  SuggestionsHeader,
+  SuggestionsGrid,
+  MessagesContainer,
+  MessageRow,
+  MessageAvatar,
+  MessageBubble,
+  MessageContent,
+  LoadingMessage,
+  LoadingBubble,
+  LoadingContent,
+  LoadingText,
+  InputArea,
+  ErrorMessage,
+  InputRow,
+} from "./styles";
 
 interface AIChatPanelProps {
   analysisId: number;
@@ -36,7 +63,6 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Load initial data
   useEffect(() => {
     async function loadInitialData() {
       setIsLoadingInitial(true);
@@ -65,7 +91,6 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
     }
   }, [analysisId]);
 
-  // Scroll to bottom when new messages arrive
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -78,7 +103,6 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
     const question = inputValue.trim();
     setInputValue("");
 
-    // Add user message
     const userMessage: ChatMessage = {
       role: "user",
       content: question,
@@ -90,7 +114,6 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
     try {
       const response = await askQuestion(analysisId, question);
 
-      // Add assistant message
       const assistantMessage: ChatMessage = {
         role: "assistant",
         content: response.answer,
@@ -125,75 +148,75 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
 
   if (isLoadingInitial) {
     return (
-      <div className="flex flex-col h-full p-4 space-y-4">
+      <ChatLoadingContainer>
         {/* Skeleton for auto analysis card */}
-        <Card className="border-primary/20 bg-primary/5">
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
+        <AutoAnalysisCard elevation={0}>
+          <AutoAnalysisHeader>
+            <AutoAnalysisTitle>
               <Skeleton className="h-4 w-4 rounded-full" />
               <Skeleton className="h-4 w-32" />
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
+            </AutoAnalysisTitle>
+          </AutoAnalysisHeader>
+          <AutoAnalysisContent>
             <Skeleton className="h-4 w-full" />
             <Skeleton className="h-3 w-full" />
             <Skeleton className="h-3 w-3/4" />
-          </CardContent>
-        </Card>
+          </AutoAnalysisContent>
+        </AutoAnalysisCard>
         <Separator />
         {/* Skeleton for suggestions */}
-        <div className="space-y-2">
+        <SuggestionsContainer>
           <Skeleton className="h-3 w-28" />
-          <div className="flex flex-wrap gap-2">
+          <SuggestionsGrid>
             <Skeleton className="h-6 w-32 rounded-full" />
             <Skeleton className="h-6 w-40 rounded-full" />
             <Skeleton className="h-6 w-36 rounded-full" />
-          </div>
-        </div>
-      </div>
+          </SuggestionsGrid>
+        </SuggestionsContainer>
+      </ChatLoadingContainer>
     );
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <ChatPanelContainer>
       {/* Auto Analysis Section */}
       {autoAnalysis && (
-        <Card className="m-4 mb-2 border-primary/20 bg-primary/5">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-2">
+        <AutoAnalysisCard elevation={0}>
+          <AutoAnalysisHeader>
+            <AutoAnalysisTitle>
               <Sparkles className="h-4 w-4 text-primary" />
               Análise Automática
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="text-sm space-y-3">
-            <p className="font-medium">{autoAnalysis.summary}</p>
-            <p className="text-muted-foreground text-xs leading-relaxed">
+            </AutoAnalysisTitle>
+          </AutoAnalysisHeader>
+          <AutoAnalysisContent>
+            <AnalysisSummary>{autoAnalysis.summary}</AnalysisSummary>
+            <AnalysisDetail>
               {autoAnalysis.detailedAnalysis}
-            </p>
+            </AnalysisDetail>
             {autoAnalysis.recommendations.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-xs font-medium text-muted-foreground">Recomendações:</p>
-                <ul className="text-xs text-muted-foreground list-disc list-inside space-y-0.5">
+              <RecommendationsSection>
+                <RecommendationsTitle>Recomendações:</RecommendationsTitle>
+                <RecommendationsList>
                   {autoAnalysis.recommendations.map((rec, i) => (
                     <li key={i}>{rec}</li>
                   ))}
-                </ul>
-              </div>
+                </RecommendationsList>
+              </RecommendationsSection>
             )}
-          </CardContent>
-        </Card>
+          </AutoAnalysisContent>
+        </AutoAnalysisCard>
       )}
 
       <Separator />
 
       {/* Suggestions */}
       {suggestions.length > 0 && messages.length === 0 && (
-        <div className="px-4 py-3">
-          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+        <SuggestionsContainer>
+          <SuggestionsHeader>
             <Lightbulb className="h-3 w-3" />
             Perguntas sugeridas
-          </div>
-          <div className="flex flex-wrap gap-2">
+          </SuggestionsHeader>
+          <SuggestionsGrid>
             {suggestions.slice(0, 4).map((suggestion, i) => (
               <Badge
                 key={i}
@@ -204,64 +227,51 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
                 {suggestion.question}
               </Badge>
             ))}
-          </div>
-        </div>
+          </SuggestionsGrid>
+        </SuggestionsContainer>
       )}
 
       {/* Chat Messages */}
       <ScrollArea className="flex-1 px-4" ref={scrollRef}>
-        <div className="space-y-4 py-4">
+        <MessagesContainer>
           {messages.map((message, i) => (
-            <div
-              key={i}
-              className={`flex gap-3 animate-message-in ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
+            <MessageRow key={i} $isUser={message.role === "user"}>
               {message.role === "assistant" && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+                <MessageAvatar $variant="assistant">
                   <Sparkles className="h-4 w-4 text-primary" />
-                </div>
+                </MessageAvatar>
               )}
-              <div
-                className={`max-w-[80%] rounded-lg px-4 py-2 text-sm ${
-                  message.role === "user"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-muted"
-                }`}
-              >
-                <p className="whitespace-pre-wrap">{message.content}</p>
-              </div>
+              <MessageBubble $isUser={message.role === "user"}>
+                <MessageContent>{message.content}</MessageContent>
+              </MessageBubble>
               {message.role === "user" && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
+                <MessageAvatar $variant="user">
                   <MessageCircle className="h-4 w-4" />
-                </div>
+                </MessageAvatar>
               )}
-            </div>
+            </MessageRow>
           ))}
 
           {isLoading && (
-            <div className="flex gap-3 animate-message-in">
-              <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+            <LoadingMessage>
+              <MessageAvatar $variant="assistant">
                 <Sparkles className="h-4 w-4 text-primary" />
-              </div>
-              <div className="bg-muted rounded-lg px-4 py-2">
-                <div className="flex items-center gap-2">
+              </MessageAvatar>
+              <LoadingBubble>
+                <LoadingContent>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  <span className="text-sm text-muted-foreground">Pensando...</span>
-                </div>
-              </div>
-            </div>
+                  <LoadingText>Pensando...</LoadingText>
+                </LoadingContent>
+              </LoadingBubble>
+            </LoadingMessage>
           )}
-        </div>
+        </MessagesContainer>
       </ScrollArea>
 
       {/* Input Area */}
-      <div className="p-4 border-t">
-        {error && (
-          <p className="text-xs text-destructive mb-2">{error}</p>
-        )}
-        <div className="flex gap-2">
+      <InputArea>
+        {error && <ErrorMessage>{error}</ErrorMessage>}
+        <InputRow>
           <Input
             ref={inputRef}
             value={inputValue}
@@ -282,8 +292,8 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
               <Send className="h-4 w-4" />
             )}
           </Button>
-        </div>
-      </div>
-    </div>
+        </InputRow>
+      </InputArea>
+    </ChatPanelContainer>
   );
 }

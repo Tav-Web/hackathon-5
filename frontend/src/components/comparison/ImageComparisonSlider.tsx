@@ -2,7 +2,23 @@
 
 import { useState, useRef, useCallback, useEffect } from "react";
 import { GripVertical } from "lucide-react";
-import { cn } from "@/lib/utils";
+
+// Styled components
+import {
+  SliderContainer,
+  ImageContainer,
+  ClippedImageContainer,
+  SliderImage,
+  SliderHandle,
+  HandleGrip,
+  GripIcon,
+  LabelContainer,
+  LabelBadge,
+  SideBySideContainer,
+  SideBySideImage,
+  SideBySideLabel,
+  SideBySideImg,
+} from "./styles";
 
 interface ImageComparisonSliderProps {
   beforeImage: string;
@@ -76,85 +92,59 @@ export function ImageComparisonSlider({
   }, [isDragging, updateSliderPosition]);
 
   return (
-    <div
+    <SliderContainer
       ref={containerRef}
-      className={cn(
-        "relative w-full h-full overflow-hidden rounded-lg select-none cursor-ew-resize",
-        className
-      )}
+      className={className}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
     >
       {/* After Image (Background) */}
-      <div className="absolute inset-0 flex items-center justify-center bg-black">
-        <img
+      <ImageContainer>
+        <SliderImage
           src={afterImage}
           alt={afterLabel}
-          className="max-w-full max-h-full object-contain"
           draggable={false}
         />
-      </div>
+      </ImageContainer>
 
       {/* Before Image (Clipped) */}
-      <div
-        className="absolute inset-0 overflow-hidden flex items-center justify-center bg-black"
-        style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
-      >
-        <img
+      <ClippedImageContainer $position={sliderPosition}>
+        <SliderImage
           src={beforeImage}
           alt={beforeLabel}
-          className="max-w-full max-h-full object-contain"
           draggable={false}
         />
-      </div>
+      </ClippedImageContainer>
 
       {/* Slider Handle */}
-      <div
-        className="absolute top-0 bottom-0 w-1 bg-white shadow-lg transition-transform"
-        style={{ left: `${sliderPosition}%`, transform: "translateX(-50%)" }}
-      >
+      <SliderHandle $position={sliderPosition}>
         {/* Handle Grip */}
-        <div
-          className={cn(
-            "absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2",
-            "w-10 h-10 rounded-full bg-white shadow-lg",
-            "flex items-center justify-center",
-            "transition-transform",
-            isDragging && "scale-110"
-          )}
-        >
-          <GripVertical className="h-5 w-5 text-gray-600" />
-        </div>
-      </div>
+        <HandleGrip $isDragging={isDragging}>
+          <GripIcon>
+            <GripVertical className="h-5 w-5" />
+          </GripIcon>
+        </HandleGrip>
+      </SliderHandle>
 
       {/* Date Labels - Follow slider position */}
       {/* Before label - left side of slider */}
-      <div
-        className="absolute top-4 z-10 pointer-events-none transition-all duration-75"
-        style={{
-          left: `${Math.max(5, sliderPosition / 2)}%`,
-          transform: "translateX(-50%)",
-          opacity: sliderPosition > 10 ? 1 : 0,
-        }}
+      <LabelContainer
+        $position={sliderPosition}
+        $side="before"
+        $visible={sliderPosition > 10}
       >
-        <div className="px-4 py-2 bg-gray-700/95 backdrop-blur-sm rounded-lg text-white text-sm font-semibold border border-gray-600 shadow-lg">
-          {beforeLabel}
-        </div>
-      </div>
+        <LabelBadge $variant="before">{beforeLabel}</LabelBadge>
+      </LabelContainer>
+
       {/* After label - right side of slider */}
-      <div
-        className="absolute top-4 z-10 pointer-events-none transition-all duration-75"
-        style={{
-          left: `${Math.min(95, sliderPosition + (100 - sliderPosition) / 2)}%`,
-          transform: "translateX(-50%)",
-          opacity: sliderPosition < 90 ? 1 : 0,
-        }}
+      <LabelContainer
+        $position={sliderPosition}
+        $side="after"
+        $visible={sliderPosition < 90}
       >
-        <div className="px-4 py-2 bg-primary/95 backdrop-blur-sm rounded-lg text-white text-sm font-semibold border border-primary shadow-lg">
-          {afterLabel}
-        </div>
-      </div>
-    </div>
+        <LabelBadge $variant="after">{afterLabel}</LabelBadge>
+      </LabelContainer>
+    </SliderContainer>
   );
 }
 
@@ -175,27 +165,15 @@ export function SideBySideComparison({
   className,
 }: SideBySideComparisonProps) {
   return (
-    <div className={cn("grid grid-cols-2 gap-2 h-full", className)}>
-      <div className="relative rounded-lg overflow-hidden">
-        <img
-          src={beforeImage}
-          alt={beforeLabel}
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute top-2 left-2 px-2 py-1 bg-black/50 rounded text-white text-xs font-medium">
-          {beforeLabel}
-        </div>
-      </div>
-      <div className="relative rounded-lg overflow-hidden">
-        <img
-          src={afterImage}
-          alt={afterLabel}
-          className="w-full h-full object-cover"
-        />
-        <div className="absolute top-2 left-2 px-2 py-1 bg-black/50 rounded text-white text-xs font-medium">
-          {afterLabel}
-        </div>
-      </div>
-    </div>
+    <SideBySideContainer className={className}>
+      <SideBySideImage>
+        <SideBySideImg src={beforeImage} alt={beforeLabel} />
+        <SideBySideLabel>{beforeLabel}</SideBySideLabel>
+      </SideBySideImage>
+      <SideBySideImage>
+        <SideBySideImg src={afterImage} alt={afterLabel} />
+        <SideBySideLabel>{afterLabel}</SideBySideLabel>
+      </SideBySideImage>
+    </SideBySideContainer>
   );
 }

@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # Satellite data source: "earth_engine" or "sentinel_hub"
     SATELLITE_SOURCE: str = "earth_engine"
 
+    # Planet Labs (high resolution satellite imagery)
+    PLANET_API_KEY: str = ""
+
     # OpenRouter (LLM)
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_MODEL: str = "google/gemini-3-flash-preview"

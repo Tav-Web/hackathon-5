@@ -8,17 +8,26 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.core.satellite import EarthEngineService, SentinelHubService
+from app.core.satellite import EarthEngineService, SentinelHubService, PlanetService
 
 router = APIRouter()
 
 
-def get_satellite_service():
-    """Get the configured satellite service."""
-    source = getattr(settings, "SATELLITE_SOURCE", "earth_engine")
-    if source == "sentinel_hub":
+def get_satellite_service(source: str = "earth_engine"):
+    """Get the satellite service based on source parameter."""
+    if source == "planet":
+        if not PlanetService.is_available():
+            raise ValueError("Planet API key not configured. Set PLANET_API_KEY in .env")
+        return PlanetService
+    elif source == "sentinel":
+        # Check if Sentinel Hub has credentials configured
+        if not SentinelHubService.is_available():
+            print("Sentinel Hub credentials not configured, falling back to Earth Engine")
+            return EarthEngineService
         return SentinelHubService
-    return EarthEngineService
+    else:
+        # earth_engine (default) - always available with GEE credentials
+        return EarthEngineService
 
 
 class BoundsModel(BaseModel):
@@ -35,6 +44,7 @@ class SatelliteDownloadRequest(BaseModel):
     date_before: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     date_after: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     date_range_days: int = Field(default=30, ge=1, le=90)
+    source: str = Field(default="earth_engine", pattern=r"^(sentinel|planet|earth_engine)$")
 
 
 class SatelliteImageInfo(BaseModel):
@@ -88,10 +98,22 @@ async def download_satellite_images_task(task_id: str, request: SatelliteDownloa
             request.bounds.max_lat,
         )
 
-        # Download from configured satellite service
-        SatelliteService = get_satellite_service()
-        source_name = "Sentinel Hub" if SatelliteService == SentinelHubService else "Earth Engine"
-        download_tasks[task_id]["message"] = f"Baixando imagens do Sentinel-2 via {source_name}..."
+        # Download from requested satellite service
+        try:
+            SatelliteService = get_satellite_service(request.source)
+        except ValueError as e:
+            download_tasks[task_id]["status"] = "failed"
+            download_tasks[task_id]["message"] = str(e)
+            return
+
+        # Set appropriate message based on source
+        if request.source == "planet":
+            source_name = "Planet Labs (~3m resolution)"
+        elif request.source == "sentinel":
+            source_name = "Sentinel Hub (10m resolution)"
+        else:
+            source_name = "Google Earth Engine (10m resolution)"
+        download_tasks[task_id]["message"] = f"Baixando imagens via {source_name}..."
 
         result = await SatelliteService.download_image_pair(
             bounds=bounds,

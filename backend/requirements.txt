@@ -40,6 +40,9 @@ uuid6>=2024.1.12
 earthengine-api>=0.1.390
 google-auth>=2.20.0
 
+# Planet Labs (high resolution satellite imagery)
+planet>=2.0.0
+
 # AI/LLM Analysis
 anthropic>=0.39.0
 openai>=1.0.0

@@ -8,6 +8,8 @@ interface MapViewProps {
   changes?: GeoJSONFeatureCollection | null;
   center?: [number, number];
   zoom?: number;
+  minZoom?: number;
+  maxZoom?: number;
   isSelectingBounds?: boolean;
   selectedBounds?: Bounds | null;
   onBoundsSelected?: (bounds: Bounds) => void;
@@ -28,7 +30,9 @@ const changeTypeColors: Record<string, string> = {
 export default function MapView({
   changes,
   center = [-15.68857, -56.0339319],
-  zoom = 20,
+  zoom = 15,
+  minZoom = 3,
+  maxZoom = 18,
   isSelectingBounds = false,
   selectedBounds,
   onBoundsSelected,
@@ -69,7 +73,11 @@ export default function MapView({
 
       // Verificar se o container já tem um mapa
       if (containerRef.current && !mapRef.current) {
-        const map = L.map(containerRef.current).setView(center, zoom);
+        const map = L.map(containerRef.current, {
+          minZoom,
+          maxZoom,
+          zoomControl: true,
+        }).setView(center, Math.min(zoom, maxZoom));
 
         // Adicionar tile layer de satélite do ESRI para melhor visualização
         L.tileLayer(

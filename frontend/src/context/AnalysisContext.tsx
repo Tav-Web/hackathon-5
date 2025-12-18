@@ -14,6 +14,7 @@ import {
   ChangeSummary,
   Bounds,
   SatelliteChange,
+  SatelliteSource,
 } from "@/lib/api";
 
 interface UploadedImage {
@@ -44,9 +45,9 @@ interface AnalysisContextType extends AnalysisState {
   reset: () => void;
   setSelectedBounds: (bounds: Bounds | null) => void;
   setIsSelectingBounds: (selecting: boolean) => void;
-  downloadSatellite: (dateBefore: string, dateAfter: string) => Promise<void>;
+  downloadSatellite: (dateBefore: string, dateAfter: string, source?: SatelliteSource) => Promise<void>;
   setImageFromSatellite: (id: string, filename: string, type: "before" | "after", date: string) => void;
-  analyzeArea: (dateBefore: string, dateAfter: string, threshold?: number, minArea?: number) => Promise<void>;
+  analyzeArea: (dateBefore: string, dateAfter: string, source?: SatelliteSource, threshold?: number, minArea?: number) => Promise<void>;
 }
 
 const initialState: AnalysisState = {
@@ -117,7 +118,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const downloadSatellite = useCallback(
-    async (dateBefore: string, dateAfter: string) => {
+    async (dateBefore: string, dateAfter: string, source: SatelliteSource = "sentinel") => {
       if (!state.selectedBounds) {
         throw new Error("Selecione uma área no mapa primeiro");
       }
@@ -131,6 +132,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           date_before: dateBefore,
           date_after: dateAfter,
           date_range_days: 30,
+          source,
         });
 
         setState((prev) => ({ ...prev, progress: 10 }));
@@ -329,7 +331,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
   // Função unificada: baixa imagens de satélite e executa análise
   const analyzeArea = useCallback(
-    async (dateBefore: string, dateAfter: string, threshold = 0.3, minArea = 100) => {
+    async (dateBefore: string, dateAfter: string, source: SatelliteSource = "sentinel", threshold = 0.3, minArea = 100) => {
       if (!state.selectedBounds) {
         throw new Error("Selecione uma área no mapa primeiro");
       }
@@ -354,6 +356,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           date_before: dateBefore,
           date_after: dateAfter,
           date_range_days: 30,
+          source,
         });
 
         setState((prev) => ({ ...prev, progress: 5 }));

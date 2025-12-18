@@ -11,10 +11,12 @@ import {
   AlertCircle,
   Eye,
   X,
+  ArrowLeft,
+  RotateCcw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAnalysis } from "@/context/AnalysisContext";
-import { getSatelliteImagePreviewUrl } from "@/lib/api";
+import { getSatelliteImagePreviewUrl, SatelliteSource } from "@/lib/api";
 
 // Format date to user's locale (pt-BR: dd/mm/yyyy)
 function formatDate(dateStr: string | undefined): string {
@@ -37,15 +39,19 @@ export function SatellitePanel() {
     progress,
     selectedBounds,
     setIsSelectingBounds,
+    isSelectingBounds,
+    setSelectedBounds,
     summary,
     changes,
     analyzeArea,
     images,
+    reset,
   } = useAnalysis();
 
   const [dateBefore, setDateBefore] = useState("");
   const [dateAfter, setDateAfter] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [imageSource, setImageSource] = useState<SatelliteSource>("earth_engine");
 
   // Get satellite images for preview
   const beforeImage = images.find((img) => img.type === "before" && img.satellite);
@@ -70,7 +76,7 @@ export function SatellitePanel() {
     }
 
     try {
-      await analyzeArea(dateBefore, dateAfter);
+      await analyzeArea(dateBefore, dateAfter, imageSource);
       toast.success("Análise concluída com sucesso!");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro na análise");
@@ -94,24 +100,93 @@ export function SatellitePanel() {
         </h2>
       </div>
 
+      {/* Seleção de fonte de imagens */}
+      <div className="space-y-2">
+        <label className="text-sm font-medium text-gray-300">
+          Fonte de Imagens
+        </label>
+        <div className="flex gap-1">
+          <button
+            onClick={() => setImageSource("earth_engine")}
+            disabled={isProcessing}
+            className={`flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-colors ${
+              imageSource === "earth_engine"
+                ? "bg-green-600 text-white"
+                : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
+            } disabled:opacity-50`}
+          >
+            Earth Engine
+          </button>
+          <button
+            onClick={() => setImageSource("sentinel")}
+            disabled={isProcessing}
+            className={`flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-colors ${
+              imageSource === "sentinel"
+                ? "bg-blue-600 text-white"
+                : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
+            } disabled:opacity-50`}
+          >
+            Sentinel Hub
+          </button>
+          <button
+            onClick={() => setImageSource("planet")}
+            disabled={isProcessing}
+            className={`flex-1 py-2 px-2 rounded-lg text-xs font-medium transition-colors ${
+              imageSource === "planet"
+                ? "bg-purple-600 text-white"
+                : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
+            } disabled:opacity-50`}
+          >
+            Planet ⭐
+          </button>
+        </div>
+        <p className="text-xs text-gray-500">
+          {imageSource === "planet"
+            ? "Planet oferece 3x mais resolução (requer API key)"
+            : imageSource === "sentinel"
+            ? "Sentinel Hub requer credenciais Copernicus"
+            : "Earth Engine (10m) - sempre disponível"}
+        </p>
+      </div>
+
       {/* Seleção de área */}
       <div className="space-y-2">
         <label className="text-sm font-medium text-gray-300">
           Área de Análise
         </label>
         <div className="flex gap-2">
-          <button
-            onClick={() => setIsSelectingBounds(true)}
-            disabled={isProcessing}
-            className={`flex-1 flex items-center justify-center gap-2 ${
-              selectedBounds
-                ? 'bg-green-800 hover:bg-green-700 border-green-600'
-                : 'bg-gray-800 hover:bg-gray-700 border-gray-700'
-            } disabled:opacity-50 text-white py-2 px-4 rounded-lg transition-colors border`}
-          >
-            <MapPin className="h-4 w-4" />
-            {selectedBounds ? "Nova Seleção" : "Selecionar no Mapa"}
-          </button>
+          {isSelectingBounds ? (
+            <button
+              onClick={() => setIsSelectingBounds(false)}
+              className="flex-1 flex items-center justify-center gap-2 bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-colors border border-gray-600"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Cancelar Seleção
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsSelectingBounds(true)}
+              disabled={isProcessing}
+              className={`flex-1 flex items-center justify-center gap-2 ${
+                selectedBounds
+                  ? 'bg-green-800 hover:bg-green-700 border-green-600'
+                  : 'bg-gray-800 hover:bg-gray-700 border-gray-700'
+              } disabled:opacity-50 text-white py-2 px-4 rounded-lg transition-colors border`}
+            >
+              <MapPin className="h-4 w-4" />
+              {selectedBounds ? "Nova Seleção" : "Selecionar no Mapa"}
+            </button>
+          )}
+          {selectedBounds && !isSelectingBounds && (
+            <button
+              onClick={() => setSelectedBounds(null)}
+              disabled={isProcessing}
+              className="p-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 text-gray-400 hover:text-white rounded-lg transition-colors border border-gray-700"
+              title="Limpar seleção"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
         {selectedBounds && (
           <p className="text-xs text-green-400">
@@ -119,13 +194,17 @@ export function SatellitePanel() {
           </p>
         )}
         {selectedBounds && (() => {
-          const widthKm = (selectedBounds.max_lon - selectedBounds.min_lon) * 111;
+          // Longitude conversion varies with latitude: 1° lon = 111 * cos(lat) km
+          const centerLat = (selectedBounds.min_lat + selectedBounds.max_lat) / 2;
+          const cosLat = Math.cos((centerLat * Math.PI) / 180);
+          const widthKm = (selectedBounds.max_lon - selectedBounds.min_lon) * 111 * cosLat;
           const heightKm = (selectedBounds.max_lat - selectedBounds.min_lat) * 111;
-          // Sentinel-2 has 10m resolution, so 1km = 100 pixels
-          const widthPx = Math.round(widthKm * 100);
-          const heightPx = Math.round(heightKm * 100);
-          const isVerySmall = widthPx < 50 || heightPx < 50; // Less than 500m
-          const isSmallArea = widthPx < 200 || heightPx < 200; // Less than 2km
+          // Resolution: Sentinel-2 = 10m/pixel (100px/km), Planet = 3m/pixel (~333px/km)
+          const pxPerKm = imageSource === "planet" ? 333 : 100;
+          const widthPx = Math.round(widthKm * pxPerKm);
+          const heightPx = Math.round(heightKm * pxPerKm);
+          const isVerySmall = widthPx < 50 || heightPx < 50;
+          const isSmallArea = widthPx < 200 || heightPx < 200;
 
           return (
             <div className="text-xs text-gray-500 space-y-2">
@@ -134,27 +213,35 @@ export function SatellitePanel() {
                 <span className="text-white">{widthKm.toFixed(2)}km x {heightKm.toFixed(2)}km</span>
               </div>
               <div className="flex justify-between">
-                <span>Resolução Sentinel-2:</span>
+                <span>Resolução {imageSource === "planet" ? "Planet" : imageSource === "earth_engine" ? "Earth Engine" : "Sentinel Hub"}:</span>
                 <span className={`font-medium ${isVerySmall ? 'text-red-400' : isSmallArea ? 'text-yellow-400' : 'text-green-400'}`}>
                   {widthPx}x{heightPx} pixels
                 </span>
               </div>
-              {isVerySmall && (
-                <div className="bg-red-900/30 border border-red-700 rounded p-2 mt-1">
-                  <p className="text-red-300 flex items-center gap-1 font-medium">
-                    <AlertCircle className="h-3 w-3" />
-                    Área muito pequena!
+              {(imageSource === "sentinel" || imageSource === "earth_engine") && isVerySmall && (
+                <div className="bg-purple-900/30 border border-purple-700 rounded p-2 mt-1">
+                  <p className="text-purple-300 flex items-center gap-1 font-medium">
+                    ⭐ Experimente Planet para mais detalhes!
                   </p>
-                  <p className="text-red-200/70 mt-1">
-                    Com apenas {widthPx}x{heightPx} pixels, a imagem ficará muito pixelada.
-                    Recomendamos selecionar uma área de pelo menos 2km x 2km (200x200 pixels).
+                  <p className="text-purple-200/70 mt-1">
+                    Com Planet ({Math.round(widthPx * 3.33)}x{Math.round(heightPx * 3.33)} pixels) você terá 3x mais resolução.
                   </p>
                 </div>
               )}
-              {!isVerySmall && isSmallArea && (
-                <p className="text-yellow-400 flex items-center gap-1">
-                  <AlertCircle className="h-3 w-3" />
-                  Área pequena - considere ampliar para melhor qualidade
+              {imageSource === "planet" && isVerySmall && (
+                <div className="bg-red-900/30 border border-red-700 rounded p-2 mt-1">
+                  <p className="text-red-300 flex items-center gap-1 font-medium">
+                    <AlertCircle className="h-3 w-3" />
+                    Área ainda pequena
+                  </p>
+                  <p className="text-red-200/70 mt-1">
+                    Mesmo com Planet, a área é muito pequena. Considere ampliar.
+                  </p>
+                </div>
+              )}
+              {!isVerySmall && isSmallArea && (imageSource === "sentinel" || imageSource === "earth_engine") && (
+                <p className="text-purple-400 flex items-center gap-1">
+                  ⭐ Planet daria {Math.round(widthPx * 3.33)}x{Math.round(heightPx * 3.33)} pixels
                 </p>
               )}
               <p className="text-gray-600 text-[10px]">
@@ -291,6 +378,21 @@ export function SatellitePanel() {
         </button>
       )}
 
+      {/* Botão Nova Análise */}
+      {status === "completed" && (
+        <button
+          onClick={() => {
+            reset();
+            setDateBefore("");
+            setDateAfter("");
+          }}
+          className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white py-2 px-4 rounded-lg transition-colors text-sm border border-gray-700"
+        >
+          <RotateCcw className="h-4 w-4" />
+          Nova Análise
+        </button>
+      )}
+
       {/* Aviso se não houver mudanças */}
       {status === "completed" && changes && changes.features.length === 0 && (
         <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-3 flex items-start gap-2">
@@ -305,17 +407,27 @@ export function SatellitePanel() {
       )}
 
       <p className="text-xs text-gray-500">
-        Imagens Sentinel-2 via Copernicus Data Space
+        {imageSource === "planet"
+          ? "Imagens PlanetScope via Planet Labs Developer Trial"
+          : imageSource === "earth_engine"
+          ? "Imagens Sentinel-2 via Google Earth Engine"
+          : "Imagens Sentinel-2 via Copernicus Data Space"}
       </p>
 
       {/* Modal de Preview das Imagens */}
       {showPreview && beforeImage && afterImage && selectedBounds && (() => {
-        const widthKm = (selectedBounds.max_lon - selectedBounds.min_lon) * 111;
-        const heightKm = (selectedBounds.max_lat - selectedBounds.min_lat) * 111;
-        const widthPx = Math.round(widthKm * 100);
-        const heightPx = Math.round(heightKm * 100);
+        // Longitude conversion varies with latitude: 1° lon = 111 * cos(lat) km
         const centerLat = (selectedBounds.min_lat + selectedBounds.max_lat) / 2;
         const centerLon = (selectedBounds.min_lon + selectedBounds.max_lon) / 2;
+        const cosLat = Math.cos((centerLat * Math.PI) / 180);
+        const widthKm = (selectedBounds.max_lon - selectedBounds.min_lon) * 111 * cosLat;
+        const heightKm = (selectedBounds.max_lat - selectedBounds.min_lat) * 111;
+        // Resolution: Sentinel-2/Earth Engine = 10m/pixel (100px/km), Planet = 3m/pixel (~333px/km)
+        const pxPerKm = imageSource === "planet" ? 333 : 100;
+        const resolution = imageSource === "planet" ? "3m/pixel" : "10m/pixel";
+        const sourceName = imageSource === "planet" ? "PlanetScope" : imageSource === "earth_engine" ? "Earth Engine" : "Sentinel Hub";
+        const widthPx = Math.round(widthKm * pxPerKm);
+        const heightPx = Math.round(heightKm * pxPerKm);
 
         // Calculate aspect ratio of selected area
         const aspectRatio = widthKm / heightKm;
@@ -354,13 +466,13 @@ export function SatellitePanel() {
               </div>
 
               {/* Resolution Info Banner */}
-              <div className="mx-4 mt-4 p-3 bg-blue-900/30 border border-blue-700 rounded-lg">
-                <p className="text-sm text-blue-200">
-                  <strong>Resolução Sentinel-2:</strong> {widthPx}x{heightPx} pixels reais para área de {widthKm.toFixed(2)}km x {heightKm.toFixed(2)}km
+              <div className={`mx-4 mt-4 p-3 ${imageSource === "planet" ? "bg-purple-900/30 border-purple-700" : "bg-blue-900/30 border-blue-700"} border rounded-lg`}>
+                <p className={`text-sm ${imageSource === "planet" ? "text-purple-200" : "text-blue-200"}`}>
+                  <strong>Resolução {sourceName}:</strong> {widthPx}x{heightPx} pixels reais para área de {widthKm.toFixed(2)}km x {heightKm.toFixed(2)}km
                 </p>
-                <p className="text-xs text-blue-300/70 mt-1">
-                  Sentinel-2 tem resolução de 10m/pixel. Para áreas pequenas, a imagem terá poucos pixels.
-                  O mapa base (abaixo) mostra a mesma área em alta resolução para referência.
+                <p className={`text-xs ${imageSource === "planet" ? "text-purple-300/70" : "text-blue-300/70"} mt-1`}>
+                  {sourceName} tem resolução de {resolution}. {imageSource === "planet" ? "Alta resolução para detecção de mudanças finas." : "Para áreas pequenas, a imagem terá poucos pixels."}
+                  {imageSource === "sentinel" && " O mapa base (abaixo) mostra a mesma área em alta resolução para referência."}
                 </p>
               </div>
 
@@ -393,7 +505,7 @@ export function SatellitePanel() {
                 {/* Before Image */}
                 <div className="space-y-2">
                   <div className="flex flex-col gap-1">
-                    <h4 className="text-sm font-medium text-gray-300">ANTES (Sentinel-2)</h4>
+                    <h4 className="text-sm font-medium text-gray-300">ANTES ({sourceName})</h4>
                     <div className="flex flex-col text-xs">
                       <span className="text-gray-500">Solicitado: <span className="text-gray-300">{formatDate(dateBefore)}</span></span>
                       <span className="text-gray-500">Capturado: <span className="text-blue-400">{formatDate(beforeImage.date)}</span></span>
@@ -420,7 +532,7 @@ export function SatellitePanel() {
                 {/* After Image */}
                 <div className="space-y-2">
                   <div className="flex flex-col gap-1">
-                    <h4 className="text-sm font-medium text-gray-300">DEPOIS (Sentinel-2)</h4>
+                    <h4 className="text-sm font-medium text-gray-300">DEPOIS ({sourceName})</h4>
                     <div className="flex flex-col text-xs">
                       <span className="text-gray-500">Solicitado: <span className="text-gray-300">{formatDate(dateAfter)}</span></span>
                       <span className="text-gray-500">Capturado: <span className="text-blue-400">{formatDate(afterImage.date)}</span></span>
@@ -450,11 +562,13 @@ export function SatellitePanel() {
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-xs">
                   <div>
                     <p className="text-gray-500">Fonte</p>
-                    <p className="text-white">Copernicus Sentinel-2</p>
+                    <p className={`${imageSource === "planet" ? "text-purple-300" : imageSource === "earth_engine" ? "text-green-300" : "text-white"}`}>
+                      {imageSource === "planet" ? "Planet Labs" : imageSource === "earth_engine" ? "Google" : "Copernicus"} {sourceName}
+                    </p>
                   </div>
                   <div>
                     <p className="text-gray-500">Resolução Nativa</p>
-                    <p className="text-white">10m/pixel</p>
+                    <p className={`${imageSource === "planet" ? "text-purple-300" : imageSource === "earth_engine" ? "text-green-300" : "text-white"}`}>{resolution}</p>
                   </div>
                   <div>
                     <p className="text-gray-500">Pixels Reais</p>

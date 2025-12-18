@@ -36,6 +36,30 @@ class SentinelHubService:
     _is_cdse: bool = False
 
     @classmethod
+    def is_available(cls) -> bool:
+        """Check if Sentinel Hub credentials are configured."""
+        # Check Copernicus Data Space credentials (free)
+        client_id = os.getenv("COPERNICUS_CLIENT_ID") or getattr(settings, "COPERNICUS_CLIENT_ID", None)
+        client_secret = os.getenv("COPERNICUS_CLIENT_SECRET") or getattr(settings, "COPERNICUS_CLIENT_SECRET", None)
+        if client_id and client_secret:
+            # Strip quotes if present
+            client_id = str(client_id).strip('"').strip("'")
+            client_secret = str(client_secret).strip('"').strip("'")
+            if client_id and client_secret:
+                return True
+
+        # Check commercial Sentinel Hub credentials
+        sh_id = os.getenv("SH_CLIENT_ID") or getattr(settings, "SH_CLIENT_ID", None)
+        sh_secret = os.getenv("SH_CLIENT_SECRET") or getattr(settings, "SH_CLIENT_SECRET", None)
+        if sh_id and sh_secret:
+            sh_id = str(sh_id).strip('"').strip("'")
+            sh_secret = str(sh_secret).strip('"').strip("'")
+            if sh_id and sh_secret:
+                return True
+
+        return False
+
+    @classmethod
     def get_config(cls) -> SHConfig:
         """Get or create Sentinel Hub configuration."""
         if cls._config is None:
@@ -203,10 +227,11 @@ class SentinelHubService:
         date_end: str,
         output_dir: Optional[str] = None,
         resolution: int = 10,
-        cloud_cover_max: int = 10,  # Maximum 10% cloud cover
+        cloud_cover_max: int = 30,  # Increased default to 30% for better availability
     ) -> Optional[dict]:
         """
         Download a Sentinel-2 image for the given area and date range.
+        Uses progressive search strategy to maximize chance of finding an image.
 
         Args:
             bounds: (min_lon, min_lat, max_lon, max_lat)
@@ -225,6 +250,50 @@ class SentinelHubService:
             min_lon, min_lat, max_lon, max_lat = bounds
             bbox = BBox(bbox=[min_lon, min_lat, max_lon, max_lat], crs=CRS.WGS84)
 
+            # Progressive search strategy - try increasingly relaxed criteria
+            search_strategies = [
+                {"cloud_cover": 20, "days_expand": 0},    # Try 1: low cloud
+                {"cloud_cover": 40, "days_expand": 0},    # Try 2: medium cloud
+                {"cloud_cover": 60, "days_expand": 15},   # Try 3: high cloud + expand dates
+                {"cloud_cover": 80, "days_expand": 30},   # Try 4: very high cloud + more dates
+            ]
+
+            target_date = datetime.strptime(date_end, "%Y-%m-%d")
+            images = []
+
+            for strategy in search_strategies:
+                cc = strategy["cloud_cover"]
+                expand = strategy["days_expand"]
+
+                # Expand date range if needed
+                search_start = (datetime.strptime(date_start, "%Y-%m-%d") - timedelta(days=expand)).strftime("%Y-%m-%d")
+                search_end = (datetime.strptime(date_end, "%Y-%m-%d") + timedelta(days=expand)).strftime("%Y-%m-%d")
+
+                images = await cls.search_images(bounds, search_start, search_end, cc)
+                if images:
+                    print(f"Found {len(images)} images with {cc}% cloud max, date range expanded by {expand} days")
+                    # Sort by proximity to target date (closest first)
+                    images.sort(key=lambda x: abs(
+                        datetime.fromisoformat(x["datetime"][:10] if "T" in x["datetime"] else x["datetime"]) - target_date
+                    ))
+                    break
+
+            if not images:
+                print("No images found after all search strategies")
+                return None
+
+            # Use the best image (closest to target date with acceptable cloud cover)
+            best_image = images[0]
+            actual_cloud_cover = best_image["cloud_cover"]
+            print(f"Selected image with {actual_cloud_cover:.1f}% cloud cover")
+
+            # Get the actual date from the selected image
+            dt_str = best_image["datetime"]
+            if "T" in dt_str:
+                actual_date = dt_str.split("T")[0]
+            else:
+                actual_date = dt_str[:10]
+
             # Calculate image size based on NATIVE resolution
             # This gives us the true pixel count for Sentinel-2 at 10m/pixel
             size = bbox_to_dimensions(bbox, resolution=resolution)
@@ -240,14 +309,17 @@ class SentinelHubService:
                 size = (int(size[0] * scale), int(size[1] * scale))
                 print(f"Downscaled to {size} to prevent large downloads")
 
-            # Create request for all bands (for analysis)
+            # Create request for all bands using the specific date range
+            actual_start = (datetime.strptime(actual_date, "%Y-%m-%d") - timedelta(days=1)).strftime("%Y-%m-%d")
+            actual_end = (datetime.strptime(actual_date, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+
             request = SentinelHubRequest(
                 evalscript=cls.get_evalscript_all_bands(),
                 input_data=[
                     SentinelHubRequest.input_data(
                         data_collection=cls.get_data_collection(),
-                        time_interval=(date_start, date_end),
-                        maxcc=cloud_cover_max / 100,
+                        time_interval=(actual_start, actual_end),
+                        maxcc=actual_cloud_cover / 100 + 0.05,  # Allow slightly more than found
                         mosaicking_order="leastCC",
                     )
                 ],
@@ -266,18 +338,9 @@ class SentinelHubService:
                 print("No data returned from Sentinel Hub")
                 return None
 
-            # Get actual acquisition date from catalog
-            images = await cls.search_images(bounds, date_start, date_end, cloud_cover_max)
-            image_date = date_end  # Default
-            cloud_cover = 0
-            if images:
-                # Parse datetime from first result
-                dt_str = images[0]["datetime"]
-                if "T" in dt_str:
-                    image_date = dt_str.split("T")[0]
-                else:
-                    image_date = dt_str[:10]
-                cloud_cover = images[0]["cloud_cover"]
+            # Use the actual date and cloud cover from selected image
+            image_date = actual_date
+            cloud_cover = actual_cloud_cover
 
             # Save as GeoTIFF
             output_dir = output_dir or getattr(settings, "UPLOAD_DIR", "/tmp/hackathon_uploads")

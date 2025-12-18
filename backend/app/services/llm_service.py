@@ -49,6 +49,18 @@ Sempre responda em português brasileiro.
 
 Se não tiver informação suficiente para responder, diga claramente."""
 
+    # Mapeamento de tipos de mudança para nomes legíveis
+    CHANGE_TYPE_NAMES = {
+        "construction": "Nova Construção",
+        "deforestation": "Desmatamento",
+        "urban_expansion": "Expansão Urbana",
+        "vegetation_growth": "Crescimento de Vegetação",
+        "water_increase": "Aumento de Corpo d'Água",
+        "water_decrease": "Redução de Corpo d'Água",
+        "soil_movement": "Movimento de Solo/Terraplanagem",
+        "unknown": "Não Classificado",
+    }
+
     def __init__(self):
         """Inicializa o cliente OpenRouter."""
         self.client = OpenAI(
@@ -57,16 +69,97 @@ Se não tiver informação suficiente para responder, diga claramente."""
         )
         self.model = settings.OPENROUTER_MODEL
 
+    def _format_satellite_context(self, analysis_data: dict) -> str:
+        """
+        Formata dados de análise de satélite para contexto do LLM.
+
+        Args:
+            analysis_data: Dicionário com resultados da análise de satélite
+
+        Returns:
+            String formatada com os dados da análise
+        """
+        parts = []
+
+        # Resumo geral
+        total = analysis_data.get("total_changes", 0)
+        area = analysis_data.get("total_area_changed", 0)
+        parts.append(f"""## Resumo da Análise de Satélite
+- Total de mudanças detectadas: {total}
+- Área total alterada: {area:.2f} m²
+- Data da análise: {analysis_data.get('created_at', 'N/A')}""")
+
+        # Mudanças por tipo
+        if change_types := analysis_data.get("change_types"):
+            type_lines = ["## Mudanças por Tipo de Alteração"]
+            for ctype, stats in change_types.items():
+                name = self.CHANGE_TYPE_NAMES.get(ctype, ctype)
+                type_lines.append(f"- {name}: {stats['count']} ocorrência(s), {stats['total_area']:.2f} m² total")
+            parts.append("\n".join(type_lines))
+
+        # Índices espectrais médios
+        if spectral := analysis_data.get("spectral_summary"):
+            ndvi = spectral.get("ndvi_change_avg", 0)
+            ndbi = spectral.get("ndbi_change_avg", 0)
+            ndwi = spectral.get("ndwi_change_avg", 0)
+
+            interpretation = []
+            if ndvi < -0.2:
+                interpretation.append("perda significativa de vegetação")
+            elif ndvi > 0.2:
+                interpretation.append("aumento de cobertura vegetal")
+
+            if ndbi > 0.15:
+                interpretation.append("aumento de área construída")
+
+            if ndwi > 0.15:
+                interpretation.append("aumento de corpo d'água")
+            elif ndwi < -0.15:
+                interpretation.append("redução de corpo d'água")
+
+            interp_text = ", ".join(interpretation) if interpretation else "variações dentro da normalidade"
+
+            parts.append(f"""## Variações Espectrais Médias
+- ΔNDVI (Vegetação): {ndvi:+.4f}
+- ΔNDBI (Área Construída): {ndbi:+.4f}
+- ΔNDWI (Água): {ndwi:+.4f}
+- Interpretação: {interp_text}""")
+
+        # Detalhes das maiores mudanças
+        if changes_detail := analysis_data.get("changes_detail"):
+            parts.append("## Principais Mudanças Detectadas (por área)")
+            for i, change in enumerate(changes_detail[:3], 1):
+                ctype = self.CHANGE_TYPE_NAMES.get(change.get("type"), change.get("type"))
+                change_area = change.get("area", 0)
+                conf = change.get("confidence", 0)
+                centroid = change.get("centroid", (0, 0))
+
+                spectral = change.get("spectral", {})
+                ndvi_change = spectral.get("ndvi_change", 0)
+
+                parts.append(f"""### Mudança {i}: {ctype}
+- Área: {change_area:.2f} m²
+- Confiança: {conf*100:.1f}%
+- Localização (lat, lon): {centroid[1]:.6f}, {centroid[0]:.6f}
+- Variação NDVI: {ndvi_change:+.4f}""")
+
+        return "\n\n".join(parts)
+
     def _format_analysis_context(self, analysis_data: dict) -> str:
         """
         Formata dados da análise para contexto do LLM.
 
         Args:
-            analysis_data: Dicionário com resultados da análise GEE
+            analysis_data: Dicionário com resultados da análise (GEE ou Satélite)
 
         Returns:
             String formatada com os dados relevantes
         """
+        # Detectar tipo de análise e rotear para formatter apropriado
+        if analysis_data.get("type") == "satellite_comparison":
+            return self._format_satellite_context(analysis_data)
+
+        # Formato original para GEE
         parts = []
 
         # Classificação
@@ -102,13 +195,46 @@ Se não tiver informação suficiente para responder, diga claramente."""
 - ΔNBR: {deltas.get('nbr', 0):+.4f}""")
 
         # Metadados
+        metadata_lines = ["## Metadados da Análise"]
         if images_found := analysis_data.get("images_found"):
-            parts.append(f"""## Metadados
-- Imagens analisadas: {images_found}""")
+            metadata_lines.append(f"- Imagens de satélite analisadas: {images_found}")
 
         if start_date := analysis_data.get("start_date"):
             end_date = analysis_data.get("end_date", "N/A")
-            parts.append(f"- Período: {start_date} até {end_date}")
+            metadata_lines.append(f"- Período analisado: {start_date} até {end_date}")
+
+        if cloud_tolerance := analysis_data.get("cloud_tolerance"):
+            metadata_lines.append(f"- Tolerância de nuvens: {cloud_tolerance}%")
+
+        if len(metadata_lines) > 1:
+            parts.append("\n".join(metadata_lines))
+
+        # Localização aproximada
+        if location := analysis_data.get("location"):
+            lat = location.get("center_lat", 0)
+            lon = location.get("center_lon", 0)
+            parts.append(f"""## Localização
+- Centro aproximado: {lat:.4f}° lat, {lon:.4f}° lon""")
+
+        # Série temporal (evolução dos índices)
+        if ts_summary := analysis_data.get("time_series_summary"):
+            ts_lines = ["## Evolução Temporal"]
+            ts_lines.append(f"- Total de observações: {ts_summary.get('total_points', 0)}")
+            ts_lines.append(f"- Primeira observação: {ts_summary.get('first_date', 'N/A')}")
+            ts_lines.append(f"- Última observação: {ts_summary.get('last_date', 'N/A')}")
+
+            # Mostrar alguns pontos da série
+            if sample_points := ts_summary.get("sample_points"):
+                ts_lines.append("\nAmostra da série temporal:")
+                for point in sample_points[:5]:
+                    date = point.get("date", "N/A")
+                    ndvi = point.get("ndvi")
+                    if ndvi is not None:
+                        ts_lines.append(f"  - {date}: NDVI={ndvi:.4f}")
+                    else:
+                        ts_lines.append(f"  - {date}")
+
+            parts.append("\n".join(ts_lines))
 
         return "\n\n".join(parts)
 
@@ -217,8 +343,31 @@ Seja objetivo e baseie-se nos dados fornecidos."""
         Returns:
             Lista de perguntas sugeridas com categoria
         """
-        classification = analysis_data.get("classification", {})
-        change_type = classification.get("change_type", "SEM_MUDANCA")
+        # Determinar tipo de mudança - suporta tanto GEE quanto Satellite
+        change_type = "SEM_MUDANCA"
+
+        # Para análises de satélite
+        if analysis_data.get("type") == "satellite_comparison":
+            change_types = analysis_data.get("change_types", {})
+            if change_types:
+                # Pega o tipo com maior área
+                main_type = max(change_types.keys(), key=lambda k: change_types[k].get("total_area", 0))
+                # Mapeia tipos de satélite para tipos GEE-like
+                satellite_to_gee = {
+                    "construction": "NOVA_CONSTRUCAO",
+                    "deforestation": "DESMATAMENTO",
+                    "urban_expansion": "EXPANSAO_URBANA",
+                    "vegetation_growth": "REFLORESTAMENTO",
+                    "water_increase": "SEM_MUDANCA",
+                    "water_decrease": "SEM_MUDANCA",
+                    "soil_movement": "ENTULHO",
+                    "unknown": "SEM_MUDANCA",
+                }
+                change_type = satellite_to_gee.get(main_type, "SEM_MUDANCA")
+        else:
+            # Para análises GEE
+            classification = analysis_data.get("classification", {})
+            change_type = classification.get("change_type", "SEM_MUDANCA")
 
         # Perguntas base para todos os tipos
         base_questions = [
@@ -331,14 +480,20 @@ Seja objetivo e baseie-se nos dados fornecidos."""
 
 {context}
 
+IMPORTANTE: O campo "resumo" deve ser um texto CURTO e DIRETO de no máximo 2-3 frases, sem formatação markdown (sem **, sem ###, sem listas).
+O resumo deve ser como uma manchete de jornal que descreve o cenário principal.
+
 Retorne APENAS um JSON válido com a seguinte estrutura:
 {{
-    "titulo": "string com título descritivo",
-    "resumo": "string com resumo de 2-3 frases",
+    "titulo": "string com título descritivo curto",
+    "resumo": "string com resumo de 2-3 frases SEM MARKDOWN - texto simples e direto",
     "pontos_chave": ["lista", "de", "pontos", "importantes"],
     "recomendacoes": ["lista", "de", "recomendações"],
     "severidade": "baixa" | "media" | "alta" | "critica"
-}}"""
+}}
+
+Exemplo de resumo bom: "A análise indica predominante regeneração vegetal na região, com aumento de 31% na cobertura verde. Foram detectados 3 focos isolados de desmatamento totalizando 689 mil m²."
+Exemplo de resumo ruim: "### Resumo\n**A análise** indica..." (NÃO use markdown no resumo!)"""
 
         response = self.client.chat.completions.create(
             model=self.model,
@@ -361,7 +516,12 @@ Retorne APENAS um JSON válido com a seguinte estrutura:
         content = re.sub(r"```\s*", "", content)
 
         try:
-            return json.loads(content)
+            result = json.loads(content)
+            # Limpa o resumo de qualquer markdown residual
+            if "resumo" in result:
+                result["resumo"] = re.sub(r"\*\*|\#\#\#|\#\#|\#", "", result["resumo"])
+                result["resumo"] = result["resumo"].strip()
+            return result
         except json.JSONDecodeError:
             # Retorna estrutura padrão se falhar
             classification = analysis_data.get("classification", {})

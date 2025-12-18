@@ -75,3 +75,4 @@ uploads/
 
 # Docker
 .docker/
+tsconfig.tsbuildinfo

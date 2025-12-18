@@ -27,9 +27,14 @@ class ChatRequest(BaseModel):
     analysis_id: int = Field(..., description="ID da análise de referência")
     question: str = Field(
         ...,
-        min_length=3,
+        min_length=2,
         max_length=1000,
         description="Pergunta do usuário sobre a análise"
+    )
+    analysis_type: str = Field(
+        default="auto",
+        pattern=r"^(auto|gee|satellite)$",
+        description="Tipo de análise: auto (detecta), gee, ou satellite"
     )
 
 

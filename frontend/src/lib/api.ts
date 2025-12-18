@@ -85,11 +85,14 @@ export interface Bounds {
   max_lat: number;
 }
 
+export type SatelliteSource = "earth_engine" | "sentinel";
+
 export interface SatelliteDownloadRequest {
   bounds: Bounds;
   date_before: string;
   date_after: string;
   date_range_days?: number;
+  source?: SatelliteSource;
 }
 
 export interface SatelliteDownloadStatus {
@@ -272,4 +275,193 @@ export async function getSatelliteImageBase64(imageId: string): Promise<string> 
     )
   );
   return `data:image/png;base64,${base64}`;
+}
+
+// =====================================================
+// GEE (Google Earth Engine) Analysis API
+// =====================================================
+
+import type {
+  GeeAnalysisRequest,
+  GeeAnalysisResponse,
+  GeeAnalysisTiles,
+  AutoAnalysisResponse,
+  ChatSuggestionsResponse,
+  ChatResponse,
+} from "@/types/gee";
+
+// Start a new GEE analysis
+export async function startGeeAnalysis(
+  request: GeeAnalysisRequest
+): Promise<{ id: number; status: string; message: string }> {
+  const response = await api.post("/gee/analyze", {
+    geometry: request.geometry,
+    start_date: request.startDate,
+    end_date: request.endDate,
+    cloud_tolerance: request.cloudTolerance ?? 20,
+  });
+  return response.data;
+}
+
+// Get GEE analysis status and result
+export async function getGeeAnalysis(id: number): Promise<GeeAnalysisResponse> {
+  const response = await api.get(`/gee/${id}`);
+  const data = response.data;
+
+  // Map snake_case to camelCase
+  return {
+    id: data.id,
+    status: data.status,
+    progress: data.progress ?? 0,
+    imagesFound: data.images_found,
+    classification: data.classification
+      ? {
+          changeType: data.classification.change_type,
+          confidence: data.classification.confidence,
+          description: data.classification.description,
+          alertLevel: data.classification.alert_level,
+        }
+      : undefined,
+    indicesStart: data.indices_start
+      ? {
+          ndvi: data.indices_start.ndvi,
+          ndbi: data.indices_start.ndbi,
+          bsi: data.indices_start.bsi,
+          nbr: data.indices_start.nbr,
+        }
+      : undefined,
+    indicesEnd: data.indices_end
+      ? {
+          ndvi: data.indices_end.ndvi,
+          ndbi: data.indices_end.ndbi,
+          bsi: data.indices_end.bsi,
+          nbr: data.indices_end.nbr,
+        }
+      : undefined,
+    deltas: data.deltas
+      ? {
+          ndvi: data.deltas.ndvi,
+          ndbi: data.deltas.ndbi,
+          bsi: data.deltas.bsi,
+          nbr: data.deltas.nbr,
+        }
+      : undefined,
+    timeSeries: data.time_series?.map((point: Record<string, unknown>) => ({
+      date: point.date,
+      ndvi: point.ndvi,
+      ndbi: point.ndbi,
+      bsi: point.bsi,
+      nbr: point.nbr,
+    })),
+    tileUrlBefore: data.tile_url_before,
+    tileUrlAfter: data.tile_url_after,
+    aiAnalysis: data.ai_analysis,
+    createdAt: data.created_at,
+    completedAt: data.completed_at,
+    errorMessage: data.error_message,
+  };
+}
+
+// Get GEE analysis tiles
+export async function getGeeAnalysisTiles(id: number): Promise<GeeAnalysisTiles> {
+  const response = await api.get(`/gee/${id}/tiles`);
+  const data = response.data;
+
+  return {
+    tileUrlBefore: data.tile_url_before,
+    tileUrlAfter: data.tile_url_after,
+    tileUrlNdviBefore: data.tile_url_ndvi_before,
+    tileUrlNdviAfter: data.tile_url_ndvi_after,
+  };
+}
+
+// List GEE analyses
+export async function listGeeAnalyses(
+  status?: string,
+  limit = 10,
+  offset = 0
+): Promise<{ items: GeeAnalysisResponse[]; total: number }> {
+  const params = new URLSearchParams();
+  if (status) params.append("status", status);
+  params.append("limit", limit.toString());
+  params.append("offset", offset.toString());
+
+  const response = await api.get(`/gee?${params.toString()}`);
+  return response.data;
+}
+
+// Delete GEE analysis
+export async function deleteGeeAnalysis(id: number): Promise<void> {
+  await api.delete(`/gee/${id}`);
+}
+
+// =====================================================
+// Chat / AI Analysis API
+// =====================================================
+
+export type AnalysisType = "auto" | "gee" | "satellite";
+
+// Get auto-generated AI analysis
+export async function getAutoAnalysis(
+  analysisId: number,
+  analysisType: AnalysisType = "auto"
+): Promise<AutoAnalysisResponse> {
+  const response = await api.get(`/chat/${analysisId}/auto-analysis`, {
+    params: { analysis_type: analysisType },
+  });
+  const data = response.data;
+
+  return {
+    analysisId: data.analysis_id,
+    summary: data.summary,
+    detailedAnalysis: data.detailed_analysis,
+    recommendations: data.recommendations,
+  };
+}
+
+// Get chat suggestions for an analysis
+export async function getChatSuggestions(
+  analysisId: number,
+  analysisType: AnalysisType = "auto"
+): Promise<ChatSuggestionsResponse> {
+  const response = await api.get(`/chat/${analysisId}/suggestions`, {
+    params: { analysis_type: analysisType },
+  });
+  const data = response.data;
+
+  return {
+    analysisId: data.analysis_id,
+    suggestions: data.suggestions,
+  };
+}
+
+// Ask a question about an analysis
+export async function askQuestion(
+  analysisId: number,
+  question: string,
+  analysisType: AnalysisType = "auto"
+): Promise<ChatResponse> {
+  const response = await api.post("/chat/ask", {
+    analysis_id: analysisId,
+    question,
+    analysis_type: analysisType,
+  });
+  const data = response.data;
+
+  return {
+    answer: data.answer,
+    sources: data.sources,
+    analysisId: data.analysis_id,
+  };
+}
+
+// Regenerate AI analysis
+export async function regenerateAnalysis(
+  analysisId: number,
+  analysisType: AnalysisType = "auto"
+): Promise<{ message: string }> {
+  const response = await api.post(`/chat/${analysisId}/regenerate-analysis`, null, {
+    params: { analysis_type: analysisType },
+  });
+  return response.data;
 }

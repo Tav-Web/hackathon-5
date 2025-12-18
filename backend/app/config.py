@@ -49,6 +49,23 @@ class Settings(BaseSettings):
     # Satellite data source: "earth_engine" or "sentinel_hub"
     SATELLITE_SOURCE: str = "earth_engine"
 
+    # Planet Labs (high resolution satellite imagery)
+    # Resolution: 3m/pixel - Free trial: 30 days
+    # https://www.planet.com/
+    PLANET_API_KEY: str = ""
+
+    # UP42 (high resolution satellite aggregator)
+    # Resolution: 30cm-1m - Free credits on signup
+    # https://up42.com/
+    # Uses your UP42 account email and password for authentication
+    UP42_USERNAME: str = ""
+    UP42_PASSWORD: str = ""
+
+    # SkyWatch (satellite imagery marketplace)
+    # Resolution: 50cm-3m - Pay-as-you-go, no minimum
+    # https://skywatch.com/
+    SKYWATCH_API_KEY: str = ""
+
     # OpenRouter (LLM)
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_MODEL: str = "google/gemini-3-flash-preview"

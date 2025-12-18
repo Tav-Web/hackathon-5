@@ -98,7 +98,7 @@ jobs:
       - name: Lint
         run: |
           cd frontend
-          npm run lint
+          npx eslint . --ext .ts,.tsx,.js,.jsx
         env:
           ESLINT_USE_FLAT_CONFIG: "false"
 

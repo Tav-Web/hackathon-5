@@ -298,7 +298,6 @@ export default function MapView({
       ref={containerRef}
       data-map-container
       className="w-full h-full"
-      style={{ minHeight: "500px" }}
     />
   );
 }

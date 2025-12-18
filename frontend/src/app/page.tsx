@@ -100,7 +100,7 @@ export default function Home() {
   );
 
   return (
-    <main className="min-h-screen flex flex-col bg-background">
+    <main className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Header */}
       <header className="bg-card border-b p-4">
         <div className="container mx-auto flex items-center justify-between">
@@ -198,7 +198,7 @@ export default function Home() {
                 />
                 {/* Selection Instruction */}
                 {isSelectingBounds && (
-                  <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg z-[1000]">
+                  <div className="absolute top-4 left-1/2 transform -translate-x-1/2 bg-primary text-primary-foreground px-4 py-2 rounded-lg shadow-lg z-10">
                     Clique e arraste para selecionar a área de análise
                   </div>
                 )}

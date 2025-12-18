@@ -13,6 +13,7 @@ import {
   X,
   ArrowLeft,
   RotateCcw,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAnalysis } from "@/context/AnalysisContext";
@@ -33,7 +34,28 @@ function formatDate(dateStr: string | undefined): string {
   }
 }
 
-export function SatellitePanel() {
+// Tradução de tipos de mudança
+const translateChangeType = (type: string): string => {
+  const translations: Record<string, string> = {
+    urban_expansion: "Expansão Urbana",
+    vegetation_growth: "Crescimento de Vegetação",
+    vegetation_loss: "Perda de Vegetação",
+    deforestation: "Desmatamento",
+    construction: "Construção",
+    demolition: "Demolição",
+    soil_movement: "Movimentação de Solo",
+    water_change: "Alteração Hídrica",
+    debris: "Entulho",
+    unknown: "Não Classificado",
+  };
+  return translations[type] || type.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase());
+};
+
+interface SatellitePanelProps {
+  onNewAnalysis?: () => void;
+}
+
+export function SatellitePanel({ onNewAnalysis }: SatellitePanelProps = {}) {
   const {
     status,
     progress,
@@ -46,18 +68,29 @@ export function SatellitePanel() {
     analyzeArea,
     images,
     reset,
+    selectedChangeType,
+    setSelectedChangeType,
   } = useAnalysis();
 
   const [dateBefore, setDateBefore] = useState("");
   const [dateAfter, setDateAfter] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [imageSource, setImageSource] = useState<SatelliteSource>("earth_engine");
+  const [lastAnalyzedDates, setLastAnalyzedDates] = useState<{ before: string; after: string } | null>(null);
 
   // Get satellite images for preview
   const beforeImage = images.find((img) => img.type === "before" && img.satellite);
   const afterImage = images.find((img) => img.type === "after" && img.satellite);
 
   const isProcessing = status === "downloading" || status === "analyzing";
+  const isCompleted = status === "completed";
+
+  // Check if dates changed since last analysis
+  const datesChangedSinceAnalysis = isCompleted && lastAnalyzedDates &&
+    (lastAnalyzedDates.before !== dateBefore || lastAnalyzedDates.after !== dateAfter);
+
+  // Can re-analyze if dates changed or source changed
+  const canReanalyze = isCompleted && datesChangedSinceAnalysis;
 
   const handleAnalyze = async () => {
     if (!selectedBounds) {
@@ -77,9 +110,10 @@ export function SatellitePanel() {
 
     try {
       await analyzeArea(dateBefore, dateAfter, imageSource);
+      setLastAnalyzedDates({ before: dateBefore, after: dateAfter });
       toast.success("Análise concluída com sucesso!");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Erro na análise");
+      toast.error(err instanceof Error ? err.message : "Falha ao processar imagens da fonte selecionada. Tente novamente.");
     }
   };
 
@@ -87,24 +121,28 @@ export function SatellitePanel() {
 
   const getStatusText = () => {
     if (status === "downloading") return "Baixando imagens de satélite...";
-    if (status === "analyzing") return "Analisando mudanças...";
-    return "Detectar Mudanças";
+    if (status === "analyzing") return "Detectando alterações...";
+    if (status === "completed") return "Análise concluída";
+    return "Analisar Área";
   };
 
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Satellite className="h-5 w-5 text-blue-400" />
-        <h2 className="text-lg font-semibold text-white">
-          Detector de Mudanças
-        </h2>
-      </div>
+  // Check step completion status
+  const isStep1Complete = !!imageSource;
+  const isStep2Complete = !!selectedBounds;
+  const isStep3Complete = !!dateBefore && !!dateAfter && new Date(dateBefore) < new Date(dateAfter);
 
-      {/* Seleção de fonte de imagens */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-300">
-          Fonte de Imagens
-        </label>
+  return (
+    <div className="flex flex-col h-full">
+      {/* Scrollable content area */}
+      <div className="flex-1 overflow-y-auto space-y-6 pb-4">
+
+      {/* ① Fonte de Satélite */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/20 text-primary text-sm font-bold">①</span>
+          <label className="text-sm font-medium text-white">Fonte de Satélite</label>
+          {isStep1Complete && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+        </div>
         <div className="flex gap-1">
           <button
             onClick={() => setImageSource("earth_engine")}
@@ -140,7 +178,7 @@ export function SatellitePanel() {
             Planet ⭐
           </button>
         </div>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-muted-foreground opacity-70">
           {imageSource === "planet"
             ? "Planet oferece 3x mais resolução (requer API key)"
             : imageSource === "sentinel"
@@ -149,11 +187,13 @@ export function SatellitePanel() {
         </p>
       </div>
 
-      {/* Seleção de área */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-300">
-          Área de Análise
-        </label>
+      {/* ② Área de Análise */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/20 text-primary text-sm font-bold">②</span>
+          <label className="text-sm font-medium text-white">Área de Análise</label>
+          {isStep2Complete && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+        </div>
         <div className="flex gap-2">
           {isSelectingBounds ? (
             <button
@@ -253,10 +293,16 @@ export function SatellitePanel() {
         })()}
       </div>
 
-      {/* Seleção de datas */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* ③ Período */}
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/20 text-primary text-sm font-bold">③</span>
+          <label className="text-sm font-medium text-white">Período</label>
+          {isStep3Complete && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+        </div>
+        <div className="grid grid-cols-2 gap-3">
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-400">
+          <label className="text-xs font-medium text-muted-foreground opacity-70">
             Data Antes
           </label>
           <div className="relative">
@@ -272,7 +318,7 @@ export function SatellitePanel() {
           </div>
         </div>
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-400">
+          <label className="text-xs font-medium text-muted-foreground opacity-70">
             Data Depois
           </label>
           <div className="relative">
@@ -287,83 +333,88 @@ export function SatellitePanel() {
             />
           </div>
         </div>
+        </div>
       </div>
 
-      {/* Botão de análise */}
-      <button
-        onClick={handleAnalyze}
-        disabled={isProcessing || !selectedBounds || !dateBefore || !dateAfter}
-        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg transition-colors font-medium"
-      >
-        {isProcessing ? (
-          <>
-            <Loader2 className="h-5 w-5 animate-spin" />
-            {getStatusText()}
-          </>
-        ) : (
-          <>
-            <Search className="h-5 w-5" />
-            Detectar Mudanças
-          </>
-        )}
-      </button>
-
-      {/* Barra de progresso */}
-      {isProcessing && (
-        <div className="space-y-1">
-          <div className="w-full bg-gray-800 rounded-full h-2">
-            <div
-              className="bg-blue-500 h-2 rounded-full transition-all duration-300"
-              style={{ width: `${progress}%` }}
-            />
+      {/* ⑤ Resumo da Análise */}
+      {summary && status === "completed" && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="flex items-center justify-center w-6 h-6 rounded-full bg-green-500/20 text-green-500 text-sm font-bold">⑤</span>
+            <label className="text-sm font-medium text-white">Resumo da Análise</label>
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
           </div>
-          <p className="text-xs text-gray-500 text-center">{progress}%</p>
+
+          <div className="bg-gray-800/50 rounded-lg p-4 space-y-3">
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="bg-gray-900 rounded p-2">
+                <p className="text-muted-foreground opacity-70">Total de Mudanças</p>
+                <p className="text-xl font-bold text-white">
+                  {summary.total_changes}
+                </p>
+              </div>
+              <div className="bg-gray-900 rounded p-2">
+                <p className="text-muted-foreground opacity-70">Área Afetada</p>
+                <p className="text-xl font-bold text-white">
+                  {summary.total_area?.toFixed(0) || 0}
+                  <span className="text-xs text-muted-foreground"> m²</span>
+                </p>
+              </div>
+            </div>
+
+            {/* Tipos de mudanças detectadas - clicáveis para filtrar */}
+            {summary.by_type && Object.keys(summary.by_type).length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-muted-foreground opacity-70">Tipos Detectados:</p>
+                  {selectedChangeType && (
+                    <button
+                      onClick={() => setSelectedChangeType(null)}
+                      className="text-xs text-primary hover:underline"
+                    >
+                      Limpar filtro
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  {Object.entries(summary.by_type).map(([type, count]) => (
+                    <button
+                      key={type}
+                      onClick={() => setSelectedChangeType(selectedChangeType === type ? null : type)}
+                      className={`w-full flex items-center justify-between text-xs rounded px-2 py-1.5 transition-colors ${
+                        selectedChangeType === type
+                          ? "bg-primary/20 border border-primary"
+                          : "bg-gray-900 hover:bg-gray-800 border border-transparent"
+                      }`}
+                    >
+                      <span className={selectedChangeType === type ? "text-primary" : "text-gray-300"}>
+                        {translateChangeType(type)}
+                      </span>
+                      <span className={`font-medium ${selectedChangeType === type ? "text-primary" : "text-white"}`}>
+                        {count}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground opacity-50">
+                  Clique em um tipo para filtrar no mapa
+                </p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Resumo dos resultados */}
-      {summary && status === "completed" && (
-        <div className="bg-gray-800 rounded-lg p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <FileText className="h-4 w-4 text-green-400" />
-            <h3 className="text-sm font-medium text-white">
-              Relatório de Mudanças
-            </h3>
+      {/* Aviso se não houver mudanças */}
+      {status === "completed" && changes && changes.features.length === 0 && (
+        <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-3 flex items-start gap-2">
+          <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5" />
+          <div className="text-xs text-yellow-200">
+            <p className="font-medium">Nenhuma mudança detectada</p>
+            <p className="text-yellow-300/70">
+              Tente selecionar uma área maior ou um intervalo de datas diferente.
+            </p>
           </div>
-
-          <div className="grid grid-cols-2 gap-2 text-xs">
-            <div className="bg-gray-900 rounded p-2">
-              <p className="text-gray-400">Total de Mudanças</p>
-              <p className="text-xl font-bold text-white">
-                {summary.total_changes}
-              </p>
-            </div>
-            <div className="bg-gray-900 rounded p-2">
-              <p className="text-gray-400">Área Afetada</p>
-              <p className="text-xl font-bold text-white">
-                {summary.total_area?.toFixed(0) || 0}
-                <span className="text-xs text-gray-500"> m²</span>
-              </p>
-            </div>
-          </div>
-
-          {/* Tipos de mudanças detectadas */}
-          {summary.by_type && Object.keys(summary.by_type).length > 0 && (
-            <div className="space-y-2">
-              <p className="text-xs text-gray-400">Tipos Detectados:</p>
-              <div className="space-y-1">
-                {Object.entries(summary.by_type).map(([type, count]) => (
-                  <div
-                    key={type}
-                    className="flex items-center justify-between text-xs bg-gray-900 rounded px-2 py-1"
-                  >
-                    <span className="text-gray-300 capitalize">{type}</span>
-                    <span className="text-white font-medium">{count}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -385,6 +436,7 @@ export function SatellitePanel() {
             reset();
             setDateBefore("");
             setDateAfter("");
+            onNewAnalysis?.(); // Switch to map view
           }}
           className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white py-2 px-4 rounded-lg transition-colors text-sm border border-gray-700"
         >
@@ -393,26 +445,72 @@ export function SatellitePanel() {
         </button>
       )}
 
-      {/* Aviso se não houver mudanças */}
-      {status === "completed" && changes && changes.features.length === 0 && (
-        <div className="bg-yellow-900/20 border border-yellow-700 rounded-lg p-3 flex items-start gap-2">
-          <AlertCircle className="h-4 w-4 text-yellow-500 mt-0.5" />
-          <div className="text-xs text-yellow-200">
-            <p className="font-medium">Nenhuma mudança detectada</p>
-            <p className="text-yellow-300/70">
-              Tente selecionar uma área maior ou um intervalo de datas diferente.
-            </p>
-          </div>
-        </div>
-      )}
-
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-muted-foreground opacity-60">
         {imageSource === "planet"
           ? "Imagens PlanetScope via Planet Labs Developer Trial"
           : imageSource === "earth_engine"
           ? "Imagens Sentinel-2 via Google Earth Engine"
           : "Imagens Sentinel-2 via Copernicus Data Space"}
       </p>
+
+      </div>
+
+      {/* ④ Botão de Ação Principal - Fixo no rodapé */}
+      <div className="sticky bottom-0 pt-4 pb-2 bg-card border-t border-gray-800 -mx-4 px-4 mt-auto">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/20 text-primary text-sm font-bold">④</span>
+          <label className="text-sm font-medium text-white">Executar Análise</label>
+          {canReanalyze && (
+            <span className="text-xs text-yellow-400 ml-auto">Datas alteradas</span>
+          )}
+        </div>
+        <button
+          onClick={handleAnalyze}
+          disabled={isProcessing || !selectedBounds || !dateBefore || !dateAfter || (isCompleted && !canReanalyze)}
+          className={`w-full flex items-center justify-center gap-2 text-white py-4 px-4 rounded-lg transition-colors font-medium text-base ${
+            isCompleted && !canReanalyze
+              ? "bg-green-600 cursor-default"
+              : canReanalyze
+              ? "bg-yellow-600 hover:bg-yellow-500"
+              : "bg-primary hover:bg-primary/90 disabled:bg-gray-700 disabled:cursor-not-allowed"
+          }`}
+        >
+          {isProcessing ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" />
+              {getStatusText()}
+            </>
+          ) : isCompleted && !canReanalyze ? (
+            <>
+              <CheckCircle2 className="h-5 w-5" />
+              Análise Concluída
+            </>
+          ) : canReanalyze ? (
+            <>
+              <RotateCcw className="h-5 w-5" />
+              🔄 Reanalisar com Novas Datas
+            </>
+          ) : (
+            <>
+              <Search className="h-5 w-5" />
+              Analisar Área Selecionada
+            </>
+          )}
+        </button>
+
+        {/* Barra de progresso */}
+        {isProcessing && (
+          <div className="space-y-1 mt-2">
+            <div className="w-full bg-gray-800 rounded-full h-2">
+              <div
+                className="bg-primary h-2 rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground text-center">{progress}%</p>
+          </div>
+        )}
+      </div>
 
       {/* Modal de Preview das Imagens */}
       {showPreview && beforeImage && afterImage && selectedBounds && (() => {

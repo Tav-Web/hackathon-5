@@ -115,16 +115,27 @@ async def download_satellite_images_task(task_id: str, request: SatelliteDownloa
             source_name = "Google Earth Engine (10m resolution)"
         download_tasks[task_id]["message"] = f"Baixando imagens via {source_name}..."
 
+        # Planet has more limited historical coverage, use wider search range
+        date_range = request.date_range_days
+        if request.source == "planet":
+            date_range = max(date_range, 90)  # At least 90 days for Planet
+
         result = await SatelliteService.download_image_pair(
             bounds=bounds,
             date_before=request.date_before,
             date_after=request.date_after,
-            date_range_days=request.date_range_days,
+            date_range_days=date_range,
         )
 
         if result is None:
             download_tasks[task_id]["status"] = "failed"
-            download_tasks[task_id]["message"] = "Nenhuma imagem encontrada para o período/região"
+            if request.source == "planet":
+                download_tasks[task_id]["message"] = (
+                    "Planet: Falha no download. A API de teste (Developer Trial) "
+                    "não permite download de imagens. Use Earth Engine ou Sentinel."
+                )
+            else:
+                download_tasks[task_id]["message"] = "Nenhuma imagem encontrada para o período/região"
             return
 
         # Register images in the images_db
@@ -168,6 +179,9 @@ async def download_satellite_images_task(task_id: str, request: SatelliteDownloa
             "after_date": after_info["date"],
         })
 
+    except PermissionError as e:
+        download_tasks[task_id]["status"] = "failed"
+        download_tasks[task_id]["message"] = str(e)
     except Exception as e:
         download_tasks[task_id]["status"] = "failed"
         download_tasks[task_id]["message"] = str(e)

@@ -24,6 +24,15 @@ interface UploadedImage {
   date?: string;          // Actual capture date from satellite
   requestedDate?: string; // User-requested date
   satellite?: boolean;
+  source?: SatelliteSource; // Which source this image came from
+}
+
+// Images stored by source for comparison feature
+interface SourceImages {
+  before?: UploadedImage;
+  after?: UploadedImage;
+  status: "idle" | "loading" | "loaded" | "error";
+  error?: string;
 }
 
 interface AnalysisState {
@@ -36,6 +45,11 @@ interface AnalysisState {
   error: string | null;
   selectedBounds: Bounds | null;
   isSelectingBounds: boolean;
+  selectedChangeType: string | null;
+  // Multi-source comparison
+  imagesBySource: Record<SatelliteSource, SourceImages>;
+  activeComparisonSource: SatelliteSource;
+  lastAnalysisDates: { before: string; after: string } | null;
 }
 
 interface AnalysisContextType extends AnalysisState {
@@ -45,10 +59,17 @@ interface AnalysisContextType extends AnalysisState {
   reset: () => void;
   setSelectedBounds: (bounds: Bounds | null) => void;
   setIsSelectingBounds: (selecting: boolean) => void;
+  setSelectedChangeType: (type: string | null) => void;
   downloadSatellite: (dateBefore: string, dateAfter: string, source?: SatelliteSource) => Promise<void>;
   setImageFromSatellite: (id: string, filename: string, type: "before" | "after", date: string) => void;
   analyzeArea: (dateBefore: string, dateAfter: string, source?: SatelliteSource, threshold?: number, minArea?: number) => Promise<void>;
+  // Multi-source comparison
+  loadSourceImages: (source: SatelliteSource) => Promise<void>;
+  setActiveComparisonSource: (source: SatelliteSource) => void;
+  getImagesForSource: (source: SatelliteSource) => { before: UploadedImage | null; after: UploadedImage | null };
 }
+
+const initialSourceImages: SourceImages = { status: "idle" };
 
 const initialState: AnalysisState = {
   images: [],
@@ -60,6 +81,15 @@ const initialState: AnalysisState = {
   error: null,
   selectedBounds: null,
   isSelectingBounds: false,
+  selectedChangeType: null,
+  // Multi-source comparison
+  imagesBySource: {
+    earth_engine: { ...initialSourceImages },
+    sentinel: { ...initialSourceImages },
+    planet: { ...initialSourceImages },
+  },
+  activeComparisonSource: "earth_engine",
+  lastAnalysisDates: null,
 };
 
 const AnalysisContext = createContext<AnalysisContextType | undefined>(undefined);
@@ -115,6 +145,10 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
   const setIsSelectingBounds = useCallback((selecting: boolean) => {
     setState((prev) => ({ ...prev, isSelectingBounds: selecting }));
+  }, []);
+
+  const setSelectedChangeType = useCallback((type: string | null) => {
+    setState((prev) => ({ ...prev, selectedChangeType: type }));
   }, []);
 
   const downloadSatellite = useCallback(
@@ -337,6 +371,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
       }
 
       // Etapa 1: Baixar imagens de satélite
+      // Reset all sources to idle when starting new analysis (new dates)
       setState((prev) => ({
         ...prev,
         status: "downloading",
@@ -344,6 +379,12 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         error: null,
         changes: null,
         summary: null,
+        // Reset imagesBySource for all sources so they reload with new dates
+        imagesBySource: {
+          earth_engine: { status: "idle" as const },
+          sentinel: { status: "idle" as const },
+          planet: { status: "idle" as const },
+        },
       }));
 
       let beforeImageId: string | undefined;
@@ -378,27 +419,40 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
               beforeImageId = downloadStatus.before_id;
               afterImageId = downloadStatus.after_id;
 
+              const beforeImg: UploadedImage = {
+                id: downloadStatus.before_id!,
+                filename: `${source}_${downloadStatus.before_date}_before.tif`,
+                type: "before",
+                date: downloadStatus.before_date,
+                requestedDate: dateBefore,
+                satellite: true,
+                source,
+              };
+              const afterImg: UploadedImage = {
+                id: downloadStatus.after_id!,
+                filename: `${source}_${downloadStatus.after_date}_after.tif`,
+                type: "after",
+                date: downloadStatus.after_date,
+                requestedDate: dateAfter,
+                satellite: true,
+                source,
+              };
+
               setState((prev) => ({
                 ...prev,
                 progress: 40,
-                images: [
-                  {
-                    id: downloadStatus.before_id!,
-                    filename: `sentinel2_${downloadStatus.before_date}_before.tif`,
-                    type: "before",
-                    date: downloadStatus.before_date,
-                    requestedDate: dateBefore,
-                    satellite: true,
+                images: [beforeImg, afterImg],
+                // Store by source for comparison feature
+                imagesBySource: {
+                  ...prev.imagesBySource,
+                  [source]: {
+                    before: beforeImg,
+                    after: afterImg,
+                    status: "loaded" as const,
                   },
-                  {
-                    id: downloadStatus.after_id!,
-                    filename: `sentinel2_${downloadStatus.after_date}_after.tif`,
-                    type: "after",
-                    date: downloadStatus.after_date,
-                    requestedDate: dateAfter,
-                    satellite: true,
-                  },
-                ],
+                },
+                activeComparisonSource: source,
+                lastAnalysisDates: { before: dateBefore, after: dateAfter },
               }));
             }
             break;
@@ -479,6 +533,125 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
     [state.selectedBounds]
   );
 
+  // Lazy load images from a specific source (for comparison feature)
+  const loadSourceImages = useCallback(
+    async (source: SatelliteSource) => {
+      // Check if already loaded or currently loading (allow retry on error)
+      const currentStatus = state.imagesBySource[source].status;
+      if (currentStatus === "loaded" || currentStatus === "loading") {
+        return;
+      }
+
+      // Need bounds and dates from previous analysis
+      if (!state.selectedBounds || !state.lastAnalysisDates) {
+        throw new Error("Faça uma análise primeiro para comparar fontes");
+      }
+
+      const { before: dateBefore, after: dateAfter } = state.lastAnalysisDates;
+
+      // Set loading state for this source
+      setState((prev) => ({
+        ...prev,
+        imagesBySource: {
+          ...prev.imagesBySource,
+          [source]: { status: "loading" as const },
+        },
+      }));
+
+      try {
+        // Start download for this source
+        const task = await downloadSatelliteImages({
+          bounds: state.selectedBounds,
+          date_before: dateBefore,
+          date_after: dateAfter,
+          date_range_days: 30,
+          source,
+        });
+
+        // Polling for download status
+        let attempts = 0;
+        const maxAttempts = 300;
+
+        while (attempts < maxAttempts) {
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          const downloadStatus = await getSatelliteDownloadStatus(task.task_id);
+
+          if (downloadStatus.status === "completed") {
+            if (downloadStatus.before_id && downloadStatus.after_id) {
+              const beforeImg: UploadedImage = {
+                id: downloadStatus.before_id,
+                filename: `${source}_${downloadStatus.before_date}_before.tif`,
+                type: "before",
+                date: downloadStatus.before_date,
+                requestedDate: dateBefore,
+                satellite: true,
+                source,
+              };
+              const afterImg: UploadedImage = {
+                id: downloadStatus.after_id,
+                filename: `${source}_${downloadStatus.after_date}_after.tif`,
+                type: "after",
+                date: downloadStatus.after_date,
+                requestedDate: dateAfter,
+                satellite: true,
+                source,
+              };
+
+              setState((prev) => ({
+                ...prev,
+                imagesBySource: {
+                  ...prev.imagesBySource,
+                  [source]: {
+                    before: beforeImg,
+                    after: afterImg,
+                    status: "loaded" as const,
+                  },
+                },
+              }));
+              return;
+            }
+          }
+
+          if (downloadStatus.status === "failed") {
+            throw new Error(downloadStatus.message || `Falha ao carregar imagens de ${source}`);
+          }
+
+          attempts++;
+        }
+
+        throw new Error("Timeout: download demorou muito");
+      } catch (err) {
+        setState((prev) => ({
+          ...prev,
+          imagesBySource: {
+            ...prev.imagesBySource,
+            [source]: {
+              status: "error" as const,
+              error: err instanceof Error ? err.message : "Erro ao carregar",
+            },
+          },
+        }));
+        throw err;
+      }
+    },
+    [state.selectedBounds, state.lastAnalysisDates, state.imagesBySource]
+  );
+
+  const setActiveComparisonSource = useCallback((source: SatelliteSource) => {
+    setState((prev) => ({ ...prev, activeComparisonSource: source }));
+  }, []);
+
+  const getImagesForSource = useCallback(
+    (source: SatelliteSource) => {
+      const sourceData = state.imagesBySource[source];
+      return {
+        before: sourceData?.before || null,
+        after: sourceData?.after || null,
+      };
+    },
+    [state.imagesBySource]
+  );
+
   return (
     <AnalysisContext.Provider
       value={{
@@ -489,9 +662,13 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         reset,
         setSelectedBounds,
         setIsSelectingBounds,
+        setSelectedChangeType,
         downloadSatellite,
         setImageFromSatellite,
         analyzeArea,
+        loadSourceImages,
+        setActiveComparisonSource,
+        getImagesForSource,
       }}
     >
       {children}

@@ -2,7 +2,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Instalar dependências do sistema para OpenCV e GDAL
+# Instalar dependencias do sistema para OpenCV, GDAL e PostgreSQL client
 RUN apt-get update && apt-get install -y \
     libglib2.0-0 \
     libsm6 \
@@ -10,20 +10,24 @@ RUN apt-get update && apt-get install -y \
     libxrender-dev \
     libgl1 \
     libgdal-dev \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements e instalar dependências Python
+# Copiar requirements e instalar dependencias Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar código
+# Copiar codigo
 COPY . .
 
-# Criar diretório de uploads
+# Dar permissao aos scripts
+RUN chmod +x /app/scripts/*.sh
+
+# Criar diretorio de uploads
 RUN mkdir -p uploads
 
 # Expor porta
 EXPOSE 8000
 
-# Comando para rodar a aplicação
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Usar entrypoint script (cria tabelas, bucket, e inicia servidor)
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]

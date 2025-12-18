@@ -7,6 +7,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+      - uploads_data:/app/uploads
     environment:
       - ENVIRONMENT=development
       - DEBUG=true
@@ -24,9 +25,10 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: celery -A app.celery_app worker --loglevel=info
+    command: /app/scripts/celery_entrypoint.sh
     volumes:
       - ./backend:/app
+      - uploads_data:/app/uploads
     env_file:
       - ./backend/.env
     depends_on:
@@ -45,8 +47,7 @@ services:
       - /app/.next
     environment:
       - NODE_ENV=development
-    env_file:
-      - ./frontend/.env
+      - NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
     depends_on:
       - backend
 
@@ -105,3 +106,4 @@ volumes:
   postgres_data:
   redis_data:
   minio_data:
+  uploads_data:

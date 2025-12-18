@@ -86,7 +86,6 @@ const initialState: AnalysisState = {
   imagesBySource: {
     earth_engine: { ...initialSourceImages },
     sentinel: { ...initialSourceImages },
-    planet: { ...initialSourceImages },
   },
   activeComparisonSource: "earth_engine",
   lastAnalysisDates: null,
@@ -383,7 +382,6 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         imagesBySource: {
           earth_engine: { status: "idle" as const },
           sentinel: { status: "idle" as const },
-          planet: { status: "idle" as const },
         },
       }));
 
@@ -404,10 +402,10 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
         // Polling para verificar status do download
         let attempts = 0;
-        const maxDownloadAttempts = 300; // 300 * 200ms = 60s timeout
+        const maxDownloadAttempts = 120; // 120 * 1000ms = 120s timeout
 
         while (attempts < maxDownloadAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 200)); // Poll every 200ms
+          await new Promise((resolve) => setTimeout(resolve, 1000)); // Poll every 1 second
           const downloadStatus = await getSatelliteDownloadStatus(task.task_id);
 
           // Atualizar progresso (0-40% para download)
@@ -570,10 +568,10 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
         // Polling for download status
         let attempts = 0;
-        const maxAttempts = 300;
+        const maxAttempts = 120; // 120 * 1000ms = 120s timeout
 
         while (attempts < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 1000)); // Poll every 1 second
           const downloadStatus = await getSatelliteDownloadStatus(task.task_id);
 
           if (downloadStatus.status === "completed") {

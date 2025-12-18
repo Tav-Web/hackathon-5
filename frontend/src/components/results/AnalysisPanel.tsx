@@ -5,18 +5,46 @@ import { toast } from "sonner";
 import { useAnalysis } from "@/context/AnalysisContext";
 import { generatePDFReport } from "@/lib/pdfReport";
 
+// Styled components
+import {
+  PanelContainer,
+  PanelTitle,
+  AnalyzeButton,
+  HelperText,
+  ErrorText,
+  ProgressBar,
+  ProgressFill,
+  ResultsContainer,
+  SummaryCard,
+  SummaryTitle,
+  SummaryGrid,
+  SummaryItem,
+  SummaryValue,
+  SummaryLabel,
+  ByTypeCard,
+  ByTypeTitle,
+  TypesList,
+  TypeItem,
+  TypeInfo,
+  TypeIconWrapper,
+  TypeName,
+  TypeCount,
+  DownloadButton,
+  HintText,
+} from "./styles";
+
 // Tipos de mudança com ícones, cores e labels traduzidos
 const changeTypes = {
-  construction: { label: "Construção", icon: Building, color: "text-red-500" },
-  demolition: { label: "Demolição", icon: Trash2, color: "text-orange-500" },
-  deforestation: { label: "Desmatamento", icon: TreeDeciduous, color: "text-red-600" },
-  vegetation_growth: { label: "Crescimento de Vegetação", icon: TreeDeciduous, color: "text-green-500" },
-  vegetation_loss: { label: "Perda de Vegetação", icon: TreeDeciduous, color: "text-red-600" },
-  soil_movement: { label: "Movimentação de Solo", icon: MapPin, color: "text-amber-600" },
-  debris: { label: "Entulho", icon: Trash2, color: "text-gray-500" },
-  urban_expansion: { label: "Expansão Urbana", icon: Building, color: "text-purple-500" },
-  water_change: { label: "Alteração Hídrica", icon: Droplets, color: "text-blue-500" },
-  unknown: { label: "Não Classificado", icon: MapPin, color: "text-blue-500" },
+  construction: { label: "Construção", icon: Building, color: "#ef4444" },
+  demolition: { label: "Demolição", icon: Trash2, color: "#f97316" },
+  deforestation: { label: "Desmatamento", icon: TreeDeciduous, color: "#dc2626" },
+  vegetation_growth: { label: "Crescimento de Vegetação", icon: TreeDeciduous, color: "#22c55e" },
+  vegetation_loss: { label: "Perda de Vegetação", icon: TreeDeciduous, color: "#dc2626" },
+  soil_movement: { label: "Movimentação de Solo", icon: MapPin, color: "#a16207" },
+  debris: { label: "Entulho", icon: Trash2, color: "#6b7280" },
+  urban_expansion: { label: "Expansão Urbana", icon: Building, color: "#8b5cf6" },
+  water_change: { label: "Alteração Hídrica", icon: Droplets, color: "#3b82f6" },
+  unknown: { label: "Não Classificado", icon: MapPin, color: "#3b82f6" },
 };
 
 export function AnalysisPanel() {
@@ -63,17 +91,16 @@ export function AnalysisPanel() {
   }
 
   return (
-    <div className="space-y-4">
+    <PanelContainer>
       {/* Only show header and button for manual upload mode */}
       {!isSatelliteMode && (
         <>
-          <h2 className="text-lg font-semibold text-white">Análise</h2>
+          <PanelTitle>Análise</PanelTitle>
 
           {/* Botão de análise */}
-          <button
+          <AnalyzeButton
             onClick={handleAnalyze}
             disabled={analyzing || !hasImages}
-            className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 disabled:bg-gray-700 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg transition-colors font-medium"
           >
             {analyzing ? (
               <>
@@ -83,95 +110,84 @@ export function AnalysisPanel() {
             ) : (
               <>
                 <Play className="h-4 w-4" />
-                🔍 Analisar Área
+                Analisar Área
               </>
             )}
-          </button>
+          </AnalyzeButton>
 
           {!hasImages && (
-            <p className="text-xs text-gray-500 text-center">
+            <HelperText>
               Envie as imagens &quot;antes&quot; e &quot;depois&quot; para iniciar
-            </p>
+            </HelperText>
           )}
 
-          {error && (
-            <p className="text-xs text-red-500 text-center">{error}</p>
-          )}
+          {error && <ErrorText>{error}</ErrorText>}
 
           {/* Progress bar */}
           {analyzing && (
-            <div className="w-full bg-gray-700 rounded-full h-2">
-              <div
-                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
+            <ProgressBar>
+              <ProgressFill $progress={progress} />
+            </ProgressBar>
           )}
         </>
       )}
 
       {/* Resultados */}
       {summary && (
-        <div className="space-y-4">
+        <ResultsContainer>
           {/* Resumo da Análise */}
-          <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-300 mb-3">Resumo da Análise</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="bg-gray-900 rounded p-3 text-center">
-                <p className="text-2xl font-bold text-white">{summary.total_changes}</p>
-                <p className="text-xs text-gray-400">Mudanças</p>
-              </div>
-              <div className="bg-gray-900 rounded p-3 text-center">
-                <p className="text-2xl font-bold text-white">
+          <SummaryCard elevation={0}>
+            <SummaryTitle>Resumo da Análise</SummaryTitle>
+            <SummaryGrid>
+              <SummaryItem elevation={0}>
+                <SummaryValue>{summary.total_changes}</SummaryValue>
+                <SummaryLabel>Mudanças</SummaryLabel>
+              </SummaryItem>
+              <SummaryItem elevation={0}>
+                <SummaryValue>
                   {summary.total_area > 1000
                     ? `${(summary.total_area / 1000).toFixed(1)}k`
                     : summary.total_area.toFixed(0)}
-                </p>
-                <p className="text-xs text-gray-400">Área (m²)</p>
-              </div>
-            </div>
-          </div>
+                </SummaryValue>
+                <SummaryLabel>Área (m²)</SummaryLabel>
+              </SummaryItem>
+            </SummaryGrid>
+          </SummaryCard>
 
           {/* Por tipo */}
           {Object.keys(summary.by_type).length > 0 && (
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h3 className="text-sm font-medium text-gray-300 mb-3">Por Tipo</h3>
-              <div className="space-y-2">
+            <ByTypeCard elevation={0}>
+              <ByTypeTitle>Por Tipo</ByTypeTitle>
+              <TypesList>
                 {Object.entries(summary.by_type).map(([type, count]) => {
                   const typeInfo = changeTypes[type as keyof typeof changeTypes] || changeTypes.unknown;
                   const Icon = typeInfo.icon;
                   return (
-                    <div
-                      key={type}
-                      className="flex items-center justify-between bg-gray-900 rounded p-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Icon className={`h-4 w-4 ${typeInfo.color}`} />
-                        <span className="text-sm text-gray-300">{typeInfo.label}</span>
-                      </div>
-                      <span className="text-sm font-medium text-white">{count}</span>
-                    </div>
+                    <TypeItem key={type} elevation={0}>
+                      <TypeInfo>
+                        <TypeIconWrapper $color={typeInfo.color}>
+                          <Icon className="h-4 w-4" />
+                        </TypeIconWrapper>
+                        <TypeName>{typeInfo.label}</TypeName>
+                      </TypeInfo>
+                      <TypeCount>{count}</TypeCount>
+                    </TypeItem>
                   );
                 })}
-              </div>
-            </div>
+              </TypesList>
+            </ByTypeCard>
           )}
 
           {/* Botão de download PDF */}
-          <button
-            onClick={handleDownloadPDF}
-            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition-colors"
-          >
+          <DownloadButton onClick={handleDownloadPDF}>
             <FileText className="h-4 w-4" />
             Baixar Relatório da Análise
-          </button>
+          </DownloadButton>
 
           {/* Dica de interação */}
-          <div className="text-xs text-muted-foreground opacity-70">
-            <p>Clique nas áreas no mapa para ver detalhes</p>
-          </div>
-        </div>
+          <HintText>Clique nas áreas no mapa para ver detalhes</HintText>
+        </ResultsContainer>
       )}
-    </div>
+    </PanelContainer>
   );
 }

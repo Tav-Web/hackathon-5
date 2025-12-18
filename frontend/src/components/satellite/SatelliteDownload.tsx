@@ -1,14 +1,42 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Satellite, Download, Loader2, MapPin, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import {
   downloadSatelliteImages,
   getSatelliteDownloadStatus,
   Bounds,
+  SatelliteSource,
+  api,
 } from "@/lib/api";
-import { useAnalysis } from "@/context/AnalysisContext";
+import {
+  DownloadContainer,
+  HeaderRow,
+  HeaderTitle,
+  SectionContainer,
+  SectionLabel,
+  AreaButton,
+  AreaInfo,
+  DatesGrid,
+  DateSection,
+  DateLabel,
+  DateInputWrapper,
+  DateIconWrapper,
+  DateInput,
+  DownloadActionButton,
+  FooterNote,
+  SourceSelect,
+  SourceInfo,
+} from "./SatelliteDownloadStyles";
+
+interface SatelliteSourceInfo {
+  id: SatelliteSource;
+  name: string;
+  resolution: string;
+  available: boolean;
+  description: string;
+}
 
 interface SatelliteDownloadProps {
   selectedBounds: Bounds | null;
@@ -16,11 +44,45 @@ interface SatelliteDownloadProps {
 }
 
 export function SatelliteDownload({ selectedBounds, onBoundsSelect }: SatelliteDownloadProps) {
-  const { uploadImageFile } = useAnalysis();
   const [dateBefore, setDateBefore] = useState("");
   const [dateAfter, setDateAfter] = useState("");
   const [downloading, setDownloading] = useState(false);
   const [progress, setProgress] = useState("");
+  const [selectedSource, setSelectedSource] = useState<SatelliteSource>("earth_engine");
+  const [sources, setSources] = useState<SatelliteSourceInfo[]>([]);
+  const [loadingSources, setLoadingSources] = useState(true);
+
+  // Carregar fontes disponíveis
+  useEffect(() => {
+    const fetchSources = async () => {
+      try {
+        const response = await api.get("/satellite/sources");
+        setSources(response.data.sources);
+        // Selecionar a primeira fonte disponível
+        const availableSource = response.data.sources.find((s: SatelliteSourceInfo) => s.available);
+        if (availableSource) {
+          setSelectedSource(availableSource.id);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar fontes de satélite:", error);
+        // Fallback para Earth Engine
+        setSources([
+          {
+            id: "earth_engine",
+            name: "Google Earth Engine",
+            resolution: "10m",
+            available: true,
+            description: "Sentinel-2 via Google Earth Engine (gratuito)",
+          },
+        ]);
+      } finally {
+        setLoadingSources(false);
+      }
+    };
+    fetchSources();
+  }, []);
+
+  const currentSource = sources.find((s) => s.id === selectedSource);
 
   const handleDownload = async () => {
     if (!selectedBounds) {
@@ -43,6 +105,7 @@ export function SatelliteDownload({ selectedBounds, onBoundsSelect }: SatelliteD
         date_before: dateBefore,
         date_after: dateAfter,
         date_range_days: 30,
+        source: selectedSource,
       });
 
       // Polling para verificar status
@@ -88,74 +151,89 @@ export function SatelliteDownload({ selectedBounds, onBoundsSelect }: SatelliteD
     }
   };
 
-  // Data padrão: 1 ano atrás e hoje
+  // Data máxima: hoje
   const today = new Date().toISOString().split("T")[0];
-  const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
+    <DownloadContainer>
+      <HeaderRow>
         <Satellite className="h-5 w-5 text-blue-400" />
-        <h2 className="text-lg font-semibold text-white">Imagens de Satélite</h2>
-      </div>
+        <HeaderTitle>Imagens de Satélite</HeaderTitle>
+      </HeaderRow>
+
+      {/* Seleção de fonte de satélite */}
+      <SectionContainer>
+        <SectionLabel>Fonte de Imagens</SectionLabel>
+        <SourceSelect
+          value={selectedSource}
+          onChange={(e) => setSelectedSource(e.target.value as SatelliteSource)}
+          disabled={loadingSources || downloading}
+        >
+          {sources.map((source) => (
+            <option key={source.id} value={source.id} disabled={!source.available}>
+              {source.name} ({source.resolution}) {!source.available ? "- Não configurado" : ""}
+            </option>
+          ))}
+        </SourceSelect>
+        {currentSource && (
+          <SourceInfo>{currentSource.description}</SourceInfo>
+        )}
+      </SectionContainer>
 
       {/* Seleção de área */}
-      <div className="space-y-2">
-        <label className="text-sm font-medium text-gray-300">Área de Análise</label>
-        <button
-          onClick={onBoundsSelect}
-          className="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-gray-700 text-white py-2 px-4 rounded-lg transition-colors border border-gray-700"
-        >
+      <SectionContainer>
+        <SectionLabel>Área de Análise</SectionLabel>
+        <AreaButton onClick={onBoundsSelect}>
           <MapPin className="h-4 w-4" />
           {selectedBounds
             ? `${selectedBounds.min_lat.toFixed(4)}, ${selectedBounds.min_lon.toFixed(4)}`
             : "Selecionar no Mapa"}
-        </button>
+        </AreaButton>
         {selectedBounds && (
-          <p className="text-xs text-gray-500">
+          <AreaInfo>
             Área: {((selectedBounds.max_lon - selectedBounds.min_lon) * 111).toFixed(1)}km x{" "}
             {((selectedBounds.max_lat - selectedBounds.min_lat) * 111).toFixed(1)}km
-          </p>
+          </AreaInfo>
         )}
-      </div>
+      </SectionContainer>
 
       {/* Seleção de datas */}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-400">Data Antes</label>
-          <div className="relative">
-            <Calendar className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-            <input
+      <DatesGrid>
+        <DateSection>
+          <DateLabel>Data Antes</DateLabel>
+          <DateInputWrapper>
+            <DateIconWrapper>
+              <Calendar className="h-4 w-4" />
+            </DateIconWrapper>
+            <DateInput
               type="date"
               value={dateBefore}
               onChange={(e) => setDateBefore(e.target.value)}
               max={today}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 pl-8 pr-2 text-sm text-white"
             />
-          </div>
-        </div>
-        <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-400">Data Depois</label>
-          <div className="relative">
-            <Calendar className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-            <input
+          </DateInputWrapper>
+        </DateSection>
+        <DateSection>
+          <DateLabel>Data Depois</DateLabel>
+          <DateInputWrapper>
+            <DateIconWrapper>
+              <Calendar className="h-4 w-4" />
+            </DateIconWrapper>
+            <DateInput
               type="date"
               value={dateAfter}
               onChange={(e) => setDateAfter(e.target.value)}
               max={today}
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg py-2 pl-8 pr-2 text-sm text-white"
             />
-          </div>
-        </div>
-      </div>
+          </DateInputWrapper>
+        </DateSection>
+      </DatesGrid>
 
       {/* Botão de download */}
-      <button
+      <DownloadActionButton
         onClick={handleDownload}
         disabled={downloading || !selectedBounds || !dateBefore || !dateAfter}
-        className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg transition-colors"
+        $disabled={downloading || !selectedBounds || !dateBefore || !dateAfter}
       >
         {downloading ? (
           <>
@@ -165,14 +243,14 @@ export function SatelliteDownload({ selectedBounds, onBoundsSelect }: SatelliteD
         ) : (
           <>
             <Download className="h-4 w-4" />
-            Baixar Sentinel-2
+            Baixar via {currentSource?.name || "Satélite"}
           </>
         )}
-      </button>
+      </DownloadActionButton>
 
-      <p className="text-xs text-gray-500">
-        Imagens do Copernicus Sentinel-2 via Google Earth Engine
-      </p>
-    </div>
+      <FooterNote>
+        {currentSource?.description || "Selecione uma fonte de imagens"}
+      </FooterNote>
+    </DownloadContainer>
   );
 }

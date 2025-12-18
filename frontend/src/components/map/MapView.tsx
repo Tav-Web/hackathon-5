@@ -5,6 +5,42 @@ import { Search, X, MapPin, Loader2 } from "lucide-react";
 import type { GeoJSONFeatureCollection, Bounds } from "@/lib/api";
 import "leaflet/dist/leaflet.css";
 
+// Styled components
+import {
+  MapContainer,
+  LeafletContainer,
+  SearchContainer,
+  SearchInnerContainer,
+  SearchInputWrapper,
+  SearchInput,
+  SearchIconWrapper,
+  ClearButton,
+  SearchResultsDropdown,
+  SearchResultItem,
+  ResultIcon,
+  ResultContent,
+  ResultName,
+  ResultMeta,
+  ResultBadge,
+  ResultDetail,
+  NoResultsMessage,
+  NoResultsText,
+  SearchHint,
+  ClickOutsideOverlay,
+  LoadingOverlay,
+  LoadingCard,
+  LoadingSpinner,
+  LoadingText,
+  LegendContainer,
+  LegendCard,
+  LegendTitle,
+  LegendItems,
+  LegendItem,
+  LegendCheckbox,
+  LegendColor,
+  LegendLabel,
+} from "./styles";
+
 // Geocoding result type from Photon API (Komoot)
 interface PhotonFeature {
   geometry: {
@@ -539,154 +575,122 @@ export default function MapView({
   }, [changes, visibleTypes, selectedChangeType, mapReady]);
 
   return (
-    <div className="relative w-full h-full" style={{ minHeight: "500px" }}>
+    <MapContainer>
       {/* Mapa */}
-      <div
-        ref={containerRef}
-        data-map-container
-        className="w-full h-full"
-      />
+      <LeafletContainer ref={containerRef} data-map-container />
 
       {/* Search Input - Positioned to not cover zoom controls */}
-      <div className="absolute top-4 right-4 z-[1000] w-80">
-        <div className="relative">
-          <div className="flex items-center bg-card/95 backdrop-blur-sm rounded-lg border border-gray-700 shadow-lg overflow-hidden">
-            <div className="pl-3 text-gray-400">
+      <SearchContainer>
+        <SearchInnerContainer>
+          <SearchInputWrapper elevation={0}>
+            <SearchIconWrapper>
               {isSearching ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Search className="h-4 w-4" />
               )}
-            </div>
-            <input
+            </SearchIconWrapper>
+            <SearchInput
               ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => handleSearchInput(e.target.value)}
               onFocus={() => searchResults.length > 0 && setShowResults(true)}
               placeholder="Buscar cidade, bairro, CEP..."
-              className="flex-1 bg-transparent text-white text-sm py-2.5 px-3 outline-none placeholder:text-gray-500"
             />
             {searchQuery && (
-              <button
-                onClick={clearSearch}
-                className="pr-3 text-gray-400 hover:text-white transition-colors"
-              >
+              <ClearButton onClick={clearSearch} size="small">
                 <X className="h-4 w-4" />
-              </button>
+              </ClearButton>
             )}
-          </div>
+          </SearchInputWrapper>
 
           {/* Search Results Dropdown */}
           {showResults && searchResults.length > 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-card/95 backdrop-blur-sm rounded-lg border border-gray-700 shadow-lg overflow-hidden max-h-72 overflow-y-auto">
+            <SearchResultsDropdown elevation={0}>
               {searchResults.map((result, index) => (
-                <button
+                <SearchResultItem
                   key={`${result.properties.osm_id}-${index}`}
                   onClick={() => handleSelectLocation(result)}
-                  className="w-full flex items-start gap-3 px-3 py-2.5 hover:bg-gray-800/50 transition-colors text-left border-b border-gray-800 last:border-0"
                 >
-                  <MapPin className="h-4 w-4 text-primary mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white truncate">
+                  <ResultIcon>
+                    <MapPin className="h-4 w-4" />
+                  </ResultIcon>
+                  <ResultContent>
+                    <ResultName variant="body2">
                       {formatLocationName(result)}
-                    </p>
-                    <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-primary/80 bg-primary/10 px-1.5 py-0.5 rounded">
-                        {getLocationType(result)}
-                      </span>
+                    </ResultName>
+                    <ResultMeta>
+                      <ResultBadge>{getLocationType(result)}</ResultBadge>
                       {result.properties.postcode && (
-                        <span className="text-xs text-gray-500">
+                        <ResultDetail variant="caption">
                           CEP: {result.properties.postcode}
-                        </span>
+                        </ResultDetail>
                       )}
                       {result.properties.country && (
-                        <span className="text-xs text-gray-600">
+                        <ResultDetail variant="caption" sx={{ color: "#52525b" }}>
                           {result.properties.country}
-                        </span>
+                        </ResultDetail>
                       )}
-                    </div>
-                  </div>
-                </button>
+                    </ResultMeta>
+                  </ResultContent>
+                </SearchResultItem>
               ))}
-            </div>
+            </SearchResultsDropdown>
           )}
 
           {/* No results message */}
           {showResults && searchQuery.length >= 2 && !isSearching && searchResults.length === 0 && (
-            <div className="absolute top-full left-0 right-0 mt-1 bg-card/95 backdrop-blur-sm rounded-lg border border-gray-700 shadow-lg p-3">
-              <p className="text-sm text-gray-400 text-center">
-                Nenhum resultado encontrado
-              </p>
-            </div>
+            <NoResultsMessage elevation={0}>
+              <NoResultsText>Nenhum resultado encontrado</NoResultsText>
+            </NoResultsMessage>
           )}
-        </div>
+        </SearchInnerContainer>
 
         {/* Search hint */}
         {!searchQuery && (
-          <p className="text-xs text-gray-500 mt-1.5 ml-1">
-            Ex: São Paulo, 01310-100, Copacabana
-          </p>
+          <SearchHint>Ex: São Paulo, 01310-100, Copacabana</SearchHint>
         )}
-      </div>
+      </SearchContainer>
 
       {/* Click outside to close results */}
-      {showResults && (
-        <div
-          className="fixed inset-0 z-[999]"
-          onClick={() => setShowResults(false)}
-        />
-      )}
+      {showResults && <ClickOutsideOverlay onClick={() => setShowResults(false)} />}
 
       {/* Loading Overlay */}
       {isLoading && (
-        <div className="absolute inset-0 bg-black/40 flex items-center justify-center z-[1000] pointer-events-none">
-          <div className="bg-card rounded-lg px-6 py-4 flex items-center gap-3 shadow-lg">
-            <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-            <span className="text-white font-medium">Processando análise...</span>
-          </div>
-        </div>
+        <LoadingOverlay>
+          <LoadingCard elevation={0}>
+            <LoadingSpinner />
+            <LoadingText>Processando análise...</LoadingText>
+          </LoadingCard>
+        </LoadingOverlay>
       )}
 
       {/* Legenda - só mostra quando há mudanças detectadas */}
       {detectedTypes.length > 0 && (
-        <div className="absolute bottom-4 right-4 z-[1000] pointer-events-auto">
-          <div className="bg-card/95 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-gray-700 max-w-[200px]">
-            <h4 className="text-xs font-semibold text-white mb-2">Tipos de Mudança</h4>
-            <div className="space-y-1.5">
+        <LegendContainer>
+          <LegendCard elevation={0}>
+            <LegendTitle>Tipos de Mudança</LegendTitle>
+            <LegendItems>
               {detectedTypes.map((type) => (
-                <label
-                  key={type}
-                  className="flex items-center gap-2 cursor-pointer group"
-                >
-                  <input
-                    type="checkbox"
+                <LegendItem key={type} onClick={() => toggleChangeType(type)}>
+                  <LegendCheckbox
                     checked={visibleTypes.has(type)}
                     onChange={() => toggleChangeType(type)}
-                    className="sr-only"
                   />
-                  <span
-                    className={`w-3 h-3 rounded-sm border-2 flex-shrink-0 transition-opacity ${
-                      visibleTypes.has(type) ? "opacity-100" : "opacity-30"
-                    }`}
-                    style={{
-                      backgroundColor: visibleTypes.has(type) ? changeTypeColors[type] : "transparent",
-                      borderColor: changeTypeColors[type],
-                    }}
+                  <LegendColor
+                    $color={changeTypeColors[type]}
+                    $visible={visibleTypes.has(type)}
                   />
-                  <span
-                    className={`text-xs transition-opacity ${
-                      visibleTypes.has(type) ? "text-gray-200" : "text-gray-500"
-                    }`}
-                  >
+                  <LegendLabel $visible={visibleTypes.has(type)}>
                     {changeTypeLabels[type] || type}
-                  </span>
-                </label>
+                  </LegendLabel>
+                </LegendItem>
               ))}
-            </div>
-          </div>
-        </div>
+            </LegendItems>
+          </LegendCard>
+        </LegendContainer>
       )}
-    </div>
+    </MapContainer>
   );
 }

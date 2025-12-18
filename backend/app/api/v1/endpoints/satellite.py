@@ -94,6 +94,9 @@ download_tasks: dict[str, dict] = {}
 # Local storage for satellite images metadata (not using SQLAlchemy for demo simplicity)
 images_db: dict[str, dict] = {}
 
+# Local storage for satellite analysis results (for chat integration)
+analyses_db: dict[str, dict] = {}
+
 
 async def download_satellite_images_task(task_id: str, request: SatelliteDownloadRequest):
     """Background task to download satellite images."""
@@ -322,8 +325,27 @@ async def analyze_satellite_images(request: SatelliteAnalyzeRequest):
         # Calculate totals - area is directly on the change object, not in properties
         total_area = sum(c.get("area", 0) for c in changes)
 
+        # Generate a numeric ID for database compatibility
+        # Use timestamp-based ID to ensure uniqueness and make it queryable
+        import time
+        analysis_id = int(time.time() * 1000) % 1000000000  # Numeric ID from timestamp
+
+        # Store analysis results for chat integration
+        analyses_db[str(analysis_id)] = {
+            "id": analysis_id,
+            "status": "completed",
+            "total_changes": len(changes),
+            "total_area_changed": total_area,
+            "changes": changes,
+            "image_before_id": request.image_before_id,
+            "image_after_id": request.image_after_id,
+            "threshold": request.threshold,
+            "min_area": request.min_area,
+            "created_at": datetime.utcnow().isoformat(),
+        }
+
         return SatelliteAnalyzeResponse(
-            id=str(uuid_module.uuid4()),
+            id=str(analysis_id),
             status="completed",
             total_changes=len(changes),
             total_area_changed=total_area,

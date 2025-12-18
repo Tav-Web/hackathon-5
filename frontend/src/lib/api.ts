@@ -399,9 +399,16 @@ export async function deleteGeeAnalysis(id: number): Promise<void> {
 // Chat / AI Analysis API
 // =====================================================
 
+export type AnalysisType = "auto" | "gee" | "satellite";
+
 // Get auto-generated AI analysis
-export async function getAutoAnalysis(analysisId: number): Promise<AutoAnalysisResponse> {
-  const response = await api.get(`/chat/${analysisId}/auto-analysis`);
+export async function getAutoAnalysis(
+  analysisId: number,
+  analysisType: AnalysisType = "auto"
+): Promise<AutoAnalysisResponse> {
+  const response = await api.get(`/chat/${analysisId}/auto-analysis`, {
+    params: { analysis_type: analysisType },
+  });
   const data = response.data;
 
   return {
@@ -413,8 +420,13 @@ export async function getAutoAnalysis(analysisId: number): Promise<AutoAnalysisR
 }
 
 // Get chat suggestions for an analysis
-export async function getChatSuggestions(analysisId: number): Promise<ChatSuggestionsResponse> {
-  const response = await api.get(`/chat/${analysisId}/suggestions`);
+export async function getChatSuggestions(
+  analysisId: number,
+  analysisType: AnalysisType = "auto"
+): Promise<ChatSuggestionsResponse> {
+  const response = await api.get(`/chat/${analysisId}/suggestions`, {
+    params: { analysis_type: analysisType },
+  });
   const data = response.data;
 
   return {
@@ -426,11 +438,13 @@ export async function getChatSuggestions(analysisId: number): Promise<ChatSugges
 // Ask a question about an analysis
 export async function askQuestion(
   analysisId: number,
-  question: string
+  question: string,
+  analysisType: AnalysisType = "auto"
 ): Promise<ChatResponse> {
   const response = await api.post("/chat/ask", {
     analysis_id: analysisId,
     question,
+    analysis_type: analysisType,
   });
   const data = response.data;
 
@@ -442,7 +456,12 @@ export async function askQuestion(
 }
 
 // Regenerate AI analysis
-export async function regenerateAnalysis(analysisId: number): Promise<{ message: string }> {
-  const response = await api.post(`/chat/${analysisId}/regenerate-analysis`);
+export async function regenerateAnalysis(
+  analysisId: number,
+  analysisType: AnalysisType = "auto"
+): Promise<{ message: string }> {
+  const response = await api.post(`/chat/${analysisId}/regenerate-analysis`, null, {
+    params: { analysis_type: analysisType },
+  });
   return response.data;
 }

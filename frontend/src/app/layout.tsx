@@ -6,6 +6,11 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Detector de Mudanças - Satélite",
   description: "Detecte mudanças territoriais em imagens de satélite",
+  icons: {
+    icon: "/iconleonardo.jpg",
+    shortcut: "/iconleonardo.jpg",
+    apple: "/iconleonardo.jpg",
+  },
 };
 
 export default function RootLayout({

@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
 import { AIChatPanel } from "./AIChatPanel";
+import type { AnalysisType } from "@/lib/api";
 import {
   DrawerHeaderRow,
   DrawerHeaderLeft,
@@ -25,6 +26,7 @@ interface ChatDrawerProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   analysisId: number | null;
+  analysisType?: AnalysisType;
   hasNewAnalysis?: boolean;
 }
 
@@ -32,6 +34,7 @@ export function ChatDrawer({
   isOpen,
   onOpenChange,
   analysisId,
+  analysisType = "auto",
   hasNewAnalysis = false,
 }: ChatDrawerProps) {
   return (
@@ -54,7 +57,7 @@ export function ChatDrawer({
 
         <DrawerContent>
           {analysisId ? (
-            <AIChatPanel analysisId={analysisId} />
+            <AIChatPanel analysisId={analysisId} analysisType={analysisType} />
           ) : (
             <DrawerEmptyState>
               <DrawerEmptyIcon>

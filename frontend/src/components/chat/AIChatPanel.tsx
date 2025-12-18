@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { Send, Sparkles, MessageCircle, Lightbulb, Loader2 } from "lucide-react";
+import { Send, Sparkles, MessageCircle, Lightbulb, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -12,6 +12,7 @@ import {
   getAutoAnalysis,
   getChatSuggestions,
   askQuestion,
+  type AnalysisType,
 } from "@/lib/api";
 import type {
   ChatMessage,
@@ -47,12 +48,76 @@ import {
   InputRow,
 } from "./styles";
 
+// Simple markdown renderer for basic formatting
+function SimpleMarkdown({ children }: { children: string }) {
+  const formatText = (text: string) => {
+    // Split by lines
+    const lines = text.split('\n');
+    const elements: React.ReactNode[] = [];
+
+    lines.forEach((line, index) => {
+      // Headers
+      if (line.startsWith('### ')) {
+        elements.push(
+          <h4 key={index} className="font-semibold text-sm mt-3 mb-1">
+            {line.slice(4)}
+          </h4>
+        );
+      } else if (line.startsWith('## ')) {
+        elements.push(
+          <h3 key={index} className="font-bold text-sm mt-3 mb-1">
+            {line.slice(3)}
+          </h3>
+        );
+      } else if (line.startsWith('# ')) {
+        elements.push(
+          <h2 key={index} className="font-bold text-base mt-3 mb-1">
+            {line.slice(2)}
+          </h2>
+        );
+      } else if (line.startsWith('* ') || line.startsWith('- ')) {
+        // List items
+        const content = line.slice(2);
+        elements.push(
+          <li key={index} className="ml-4 text-xs">
+            {formatInlineText(content)}
+          </li>
+        );
+      } else if (line.trim() === '') {
+        elements.push(<br key={index} />);
+      } else {
+        elements.push(
+          <p key={index} className="text-xs mb-1">
+            {formatInlineText(line)}
+          </p>
+        );
+      }
+    });
+
+    return elements;
+  };
+
+  // Format bold text
+  const formatInlineText = (text: string) => {
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith('**') && part.endsWith('**')) {
+        return <strong key={i}>{part.slice(2, -2)}</strong>;
+      }
+      return part;
+    });
+  };
+
+  return <div className="space-y-1">{formatText(children)}</div>;
+}
+
 interface AIChatPanelProps {
   analysisId: number;
+  analysisType?: AnalysisType;
   onClose?: () => void;
 }
 
-export function AIChatPanel({ analysisId }: AIChatPanelProps) {
+export function AIChatPanel({ analysisId, analysisType = "auto" }: AIChatPanelProps) {
   const [autoAnalysis, setAutoAnalysis] = useState<AutoAnalysisResponse | null>(null);
   const [suggestions, setSuggestions] = useState<SuggestedQuestion[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -60,6 +125,7 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingInitial, setIsLoadingInitial] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isAnalysisExpanded, setIsAnalysisExpanded] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -70,8 +136,8 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
 
       try {
         const [analysisData, suggestionsData] = await Promise.all([
-          getAutoAnalysis(analysisId).catch(() => null),
-          getChatSuggestions(analysisId).catch(() => ({ suggestions: [] })),
+          getAutoAnalysis(analysisId, analysisType).catch(() => null),
+          getChatSuggestions(analysisId, analysisType).catch(() => ({ suggestions: [] })),
         ]);
 
         if (analysisData) {
@@ -89,7 +155,7 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
     if (analysisId) {
       loadInitialData();
     }
-  }, [analysisId]);
+  }, [analysisId, analysisType]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -112,7 +178,7 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
     setIsLoading(true);
 
     try {
-      const response = await askQuestion(analysisId, question);
+      const response = await askQuestion(analysisId, question, analysisType);
 
       const assistantMessage: ChatMessage = {
         role: "assistant",
@@ -179,7 +245,7 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
 
   return (
     <ChatPanelContainer>
-      {/* Auto Analysis Section */}
+      {/* Auto Analysis Section - Collapsible */}
       {autoAnalysis && (
         <AutoAnalysisCard elevation={0}>
           <AutoAnalysisHeader>
@@ -189,20 +255,47 @@ export function AIChatPanel({ analysisId }: AIChatPanelProps) {
             </AutoAnalysisTitle>
           </AutoAnalysisHeader>
           <AutoAnalysisContent>
+            {/* Summary - Always visible */}
             <AnalysisSummary>{autoAnalysis.summary}</AnalysisSummary>
-            <AnalysisDetail>
-              {autoAnalysis.detailedAnalysis}
-            </AnalysisDetail>
-            {autoAnalysis.recommendations.length > 0 && (
-              <RecommendationsSection>
-                <RecommendationsTitle>Recomendações:</RecommendationsTitle>
-                <RecommendationsList>
-                  {autoAnalysis.recommendations.map((rec, i) => (
-                    <li key={i}>{rec}</li>
-                  ))}
-                </RecommendationsList>
-              </RecommendationsSection>
+
+            {/* Detailed Analysis - Collapsible */}
+            {isAnalysisExpanded && (
+              <AnalysisDetail style={{ maxHeight: '250px', overflowY: 'auto' }}>
+                <SimpleMarkdown>{autoAnalysis.detailedAnalysis}</SimpleMarkdown>
+
+                {/* Recommendations */}
+                {autoAnalysis.recommendations.length > 0 && (
+                  <RecommendationsSection>
+                    <RecommendationsTitle>Recomendações:</RecommendationsTitle>
+                    <RecommendationsList>
+                      {autoAnalysis.recommendations.map((rec, i) => (
+                        <li key={i}>{rec}</li>
+                      ))}
+                    </RecommendationsList>
+                  </RecommendationsSection>
+                )}
+              </AnalysisDetail>
             )}
+
+            {/* Expand/Collapse Button */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsAnalysisExpanded(!isAnalysisExpanded)}
+              className="w-full h-7 text-xs text-muted-foreground hover:text-foreground mt-2"
+            >
+              {isAnalysisExpanded ? (
+                <>
+                  <ChevronUp className="h-3 w-3 mr-1" />
+                  Ver menos
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3 w-3 mr-1" />
+                  Ver análise completa
+                </>
+              )}
+            </Button>
           </AutoAnalysisContent>
         </AutoAnalysisCard>
       )}

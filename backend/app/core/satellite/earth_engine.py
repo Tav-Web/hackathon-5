@@ -27,19 +27,25 @@ class EarthEngineService:
             return
 
         try:
-            # Tentar autenticação com service account
-            service_account = os.getenv("GEE_SERVICE_ACCOUNT")
-            key_file = os.getenv("GEE_KEY_FILE")
+            # Get credentials from settings
+            project_id = settings.GEE_PROJECT_ID
+            key_file = settings.GEE_SERVICE_ACCOUNT_KEY
 
-            if service_account and key_file:
-                credentials = ee.ServiceAccountCredentials(service_account, key_file)
-                ee.Initialize(credentials)
+            if key_file and os.path.exists(key_file):
+                # Use service account credentials
+                credentials = ee.ServiceAccountCredentials(None, key_file)
+                ee.Initialize(credentials, project=project_id)
+                print(f"Earth Engine initialized with service account (project: {project_id})")
+            elif project_id:
+                # Use application default credentials with project
+                ee.Initialize(project=project_id, opt_url='https://earthengine-highvolume.googleapis.com')
+                print(f"Earth Engine initialized with default credentials (project: {project_id})")
             else:
-                # Usar autenticação padrão (requer gcloud auth ou ee.Authenticate())
+                # Fallback to default initialization
                 ee.Initialize(opt_url='https://earthengine-highvolume.googleapis.com')
+                print("Earth Engine initialized with default credentials")
 
             cls._initialized = True
-            print("Earth Engine initialized successfully")
         except Exception as e:
             print(f"Warning: Earth Engine initialization failed: {e}")
             print("You may need to run 'earthengine authenticate' first")
@@ -51,7 +57,7 @@ class EarthEngineService:
         bounds: tuple[float, float, float, float],  # (min_lon, min_lat, max_lon, max_lat)
         date_start: str,
         date_end: str,
-        cloud_cover_max: int = 20,
+        cloud_cover_max: int = 10,  # Reduced from 20 for better image quality
     ) -> Optional[ee.Image]:
         """
         Get a Sentinel-2 image for the given area and date range.
@@ -117,9 +123,32 @@ class EarthEngineService:
         Returns:
             dict with image info and filepath, or None if failed
         """
+        # Use exact bounds selected by user (no expansion)
         image = cls.get_sentinel2_image(bounds, date_start, date_end)
         if image is None:
             return None
+
+        # Calculate approximate pixel dimensions
+        min_lon, min_lat, max_lon, max_lat = bounds
+        # Approximate: 1 degree latitude = 111km, 1 degree longitude = 111km * cos(lat)
+        import math
+        avg_lat = (min_lat + max_lat) / 2
+        width_deg = max_lon - min_lon
+        height_deg = max_lat - min_lat
+        width_m = width_deg * 111000 * math.cos(math.radians(avg_lat))
+        height_m = height_deg * 111000
+
+        # Calculate pixels at given scale
+        width_px = int(width_m / scale)
+        height_px = int(height_m / scale)
+
+        # Ensure minimum size for good quality
+        min_pixels = 512
+        if width_px < min_pixels or height_px < min_pixels:
+            scale_factor = max(min_pixels / max(width_px, 1), min_pixels / max(height_px, 1))
+            # Reduce scale to get more pixels (finer resolution)
+            scale = max(1, int(scale / scale_factor))
+            print(f"Adjusted scale to {scale}m for better image quality")
 
         # Get image info
         info = image.getInfo()
@@ -127,7 +156,7 @@ class EarthEngineService:
             info["properties"].get("system:time_start", 0) / 1000
         ).strftime("%Y-%m-%d")
 
-        # Generate download URL
+        # Generate download URL with exact user bounds
         min_lon, min_lat, max_lon, max_lat = bounds
         region = ee.Geometry.Rectangle([min_lon, min_lat, max_lon, max_lat])
 
@@ -159,6 +188,7 @@ class EarthEngineService:
             height = src.height
             bounds_actual = src.bounds
 
+        # Store bounds from downloaded image (should match user selection)
         return {
             "id": image_id,
             "filepath": str(filepath),
@@ -168,6 +198,12 @@ class EarthEngineService:
                 "min_lat": bounds_actual.bottom,
                 "max_lon": bounds_actual.right,
                 "max_lat": bounds_actual.top,
+            },
+            "original_bounds": {
+                "min_lon": bounds[0],
+                "min_lat": bounds[1],
+                "max_lon": bounds[2],
+                "max_lat": bounds[3],
             },
             "crs": crs,
             "width": width,

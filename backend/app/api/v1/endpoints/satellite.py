@@ -7,13 +7,18 @@ from typing import Optional
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel, Field
 
-from app.core.satellite import EarthEngineService
-from app.core.satellite.mock_satellite import MockSatelliteService
+from app.config import settings
+from app.core.satellite import EarthEngineService, SentinelHubService
 
 router = APIRouter()
 
-# Flag to use mock service (set to True for demo without GEE auth)
-USE_MOCK = True  # Change to False when Earth Engine is authenticated
+
+def get_satellite_service():
+    """Get the configured satellite service."""
+    source = getattr(settings, "SATELLITE_SOURCE", "earth_engine")
+    if source == "sentinel_hub":
+        return SentinelHubService
+    return EarthEngineService
 
 
 class BoundsModel(BaseModel):
@@ -60,6 +65,8 @@ class SatelliteDownloadStatus(BaseModel):
     message: Optional[str] = None
     before_id: Optional[str] = None
     after_id: Optional[str] = None
+    before_date: Optional[str] = None
+    after_date: Optional[str] = None
 
 
 # Task storage
@@ -81,23 +88,17 @@ async def download_satellite_images_task(task_id: str, request: SatelliteDownloa
             request.bounds.max_lat,
         )
 
-        # Use mock service for demo or real Earth Engine when authenticated
-        if USE_MOCK:
-            download_tasks[task_id]["message"] = "Gerando imagens de demonstração..."
-            result = await MockSatelliteService.download_image_pair(
-                bounds=bounds,
-                date_before=request.date_before,
-                date_after=request.date_after,
-                date_range_days=request.date_range_days,
-            )
-        else:
-            download_tasks[task_id]["message"] = "Baixando imagens do Sentinel-2..."
-            result = await EarthEngineService.download_image_pair(
-                bounds=bounds,
-                date_before=request.date_before,
-                date_after=request.date_after,
-                date_range_days=request.date_range_days,
-            )
+        # Download from configured satellite service
+        SatelliteService = get_satellite_service()
+        source_name = "Sentinel Hub" if SatelliteService == SentinelHubService else "Earth Engine"
+        download_tasks[task_id]["message"] = f"Baixando imagens do Sentinel-2 via {source_name}..."
+
+        result = await SatelliteService.download_image_pair(
+            bounds=bounds,
+            date_before=request.date_before,
+            date_after=request.date_after,
+            date_range_days=request.date_range_days,
+        )
 
         if result is None:
             download_tasks[task_id]["status"] = "failed"
@@ -235,8 +236,22 @@ async def analyze_satellite_images(request: SatelliteAnalyzeRequest):
             min_area=request.min_area,
         )
 
-        # Calculate totals
-        total_area = sum(c.get("properties", {}).get("area", 0) for c in changes)
+        # Filter changes to only include those within the original selected area
+        # (images may be expanded for better quality, but we only want changes in user's selection)
+        original_bounds = before_image.get("original_bounds") or after_image.get("original_bounds")
+        if original_bounds:
+            filtered_changes = []
+            for change in changes:
+                centroid = change.get("centroid", (0, 0))
+                lon, lat = centroid
+                # Check if centroid is within original bounds
+                if (original_bounds["min_lon"] <= lon <= original_bounds["max_lon"] and
+                    original_bounds["min_lat"] <= lat <= original_bounds["max_lat"]):
+                    filtered_changes.append(change)
+            changes = filtered_changes
+
+        # Calculate totals - area is directly on the change object, not in properties
+        total_area = sum(c.get("area", 0) for c in changes)
 
         return SatelliteAnalyzeResponse(
             id=str(uuid_module.uuid4()),
@@ -297,3 +312,181 @@ async def check_availability(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/image/{image_id}/preview")
+async def get_image_preview(image_id: str, mode: str = "true_color"):
+    """
+    Get a PNG preview of a satellite image.
+
+    Args:
+        image_id: UUID of the image
+        mode: Visualization mode - "true_color" (default), "false_color", or "ndvi"
+    """
+    import io
+    import numpy as np
+    import rasterio
+    from PIL import Image, ImageEnhance
+    from fastapi.responses import StreamingResponse
+
+    if image_id not in images_db:
+        raise HTTPException(status_code=404, detail=f"Imagem não encontrada: {image_id}")
+
+    image_info = images_db[image_id]
+    filepath = image_info.get("filepath")
+
+    if not filepath:
+        raise HTTPException(status_code=404, detail="Arquivo de imagem não encontrado")
+
+    try:
+        with rasterio.open(filepath) as src:
+            # Sentinel-2 bands: B4 (Red), B3 (Green), B2 (Blue), B8 (NIR), B11 (SWIR1), B12 (SWIR2)
+
+            def normalize_band(band, lower_percentile=1, upper_percentile=99, gamma=1.0):
+                """Normalize band with percentile stretch and optional gamma correction."""
+                min_val = np.percentile(band, lower_percentile)
+                max_val = np.percentile(band, upper_percentile)
+                normalized = np.clip((band - min_val) / (max_val - min_val + 1e-10), 0, 1)
+                # Apply gamma correction for better visual contrast
+                if gamma != 1.0:
+                    normalized = np.power(normalized, 1/gamma)
+                return (normalized * 255).astype(np.uint8)
+
+            if src.count >= 4:
+                # Read all needed bands
+                red = src.read(1).astype(np.float32)    # B4
+                green = src.read(2).astype(np.float32)  # B3
+                blue = src.read(3).astype(np.float32)   # B2
+                nir = src.read(4).astype(np.float32)    # B8
+
+                if mode == "false_color":
+                    # False color (NIR, Red, Green) - vegetation appears red
+                    r = normalize_band(nir, gamma=1.2)
+                    g = normalize_band(red, gamma=1.2)
+                    b = normalize_band(green, gamma=1.2)
+                elif mode == "ndvi":
+                    # NDVI visualization with color map
+                    with np.errstate(divide='ignore', invalid='ignore'):
+                        ndvi = (nir - red) / (nir + red + 1e-10)
+                        ndvi = np.nan_to_num(ndvi, nan=0.0)
+                        ndvi = np.clip(ndvi, -1, 1)
+
+                    # Color map: brown (-1) -> yellow (0) -> green (1)
+                    r = np.zeros_like(ndvi, dtype=np.uint8)
+                    g = np.zeros_like(ndvi, dtype=np.uint8)
+                    b = np.zeros_like(ndvi, dtype=np.uint8)
+
+                    # Negative NDVI (water, bare soil) - brown/red
+                    mask_neg = ndvi < 0
+                    r[mask_neg] = 139
+                    g[mask_neg] = 69
+                    b[mask_neg] = 19
+
+                    # Low NDVI (0-0.2) - yellow/brown
+                    mask_low = (ndvi >= 0) & (ndvi < 0.2)
+                    r[mask_low] = 210
+                    g[mask_low] = 180
+                    b[mask_low] = 140
+
+                    # Medium NDVI (0.2-0.5) - light green
+                    mask_med = (ndvi >= 0.2) & (ndvi < 0.5)
+                    intensity = ((ndvi[mask_med] - 0.2) / 0.3 * 155 + 100).astype(np.uint8)
+                    r[mask_med] = 100
+                    g[mask_med] = intensity
+                    b[mask_med] = 50
+
+                    # High NDVI (0.5+) - dark green
+                    mask_high = ndvi >= 0.5
+                    r[mask_high] = 34
+                    g[mask_high] = 139
+                    b[mask_high] = 34
+                else:
+                    # True color (Red, Green, Blue) - natural looking
+                    # Apply stronger contrast and brightness for Sentinel-2
+                    r = normalize_band(red, lower_percentile=2, upper_percentile=98, gamma=1.3)
+                    g = normalize_band(green, lower_percentile=2, upper_percentile=98, gamma=1.3)
+                    b = normalize_band(blue, lower_percentile=2, upper_percentile=98, gamma=1.3)
+
+            elif src.count >= 3:
+                # RGB image
+                red = src.read(1).astype(np.float32)
+                green = src.read(2).astype(np.float32)
+                blue = src.read(3).astype(np.float32)
+
+                r = normalize_band(red, gamma=1.2)
+                g = normalize_band(green, gamma=1.2)
+                b = normalize_band(blue, gamma=1.2)
+            else:
+                # Single band - grayscale
+                band = src.read(1).astype(np.float32)
+                gray = normalize_band(band, gamma=1.2)
+                r = g = b = gray
+
+            # Stack into RGB image
+            rgb = np.stack([r, g, b], axis=-1)
+
+            # Create PIL Image
+            img = Image.fromarray(rgb)
+            original_size = (img.width, img.height)
+            print(f"Preview: Native resolution {original_size[0]}x{original_size[1]} pixels")
+
+            # Enhance contrast and sharpness BEFORE upscaling for better quality
+            enhancer = ImageEnhance.Contrast(img)
+            img = enhancer.enhance(1.4)  # Stronger contrast for satellite imagery
+
+            enhancer = ImageEnhance.Color(img)
+            img = enhancer.enhance(1.2)  # Boost color saturation
+
+            # For very small images (< 100px), apply Gaussian blur before upscaling
+            # to reduce blocky appearance
+            from PIL import ImageFilter
+            if img.width < 100 or img.height < 100:
+                # Apply slight blur to smooth out pixels before upscaling
+                img = img.filter(ImageFilter.GaussianBlur(radius=0.5))
+                print(f"Applied smoothing for small image")
+
+            # Smart upscaling based on original size
+            # For small images, use multi-step upscaling for better quality
+            target_size = 1200
+            if img.width < target_size or img.height < target_size:
+                scale_factor = max(target_size / img.width, target_size / img.height)
+
+                # For extreme upscaling (> 4x), do it in steps
+                if scale_factor > 4:
+                    # Step 1: 2x upscale with bicubic
+                    intermediate_size = (img.width * 2, img.height * 2)
+                    img = img.resize(intermediate_size, Image.Resampling.BICUBIC)
+                    # Apply slight sharpening
+                    enhancer = ImageEnhance.Sharpness(img)
+                    img = enhancer.enhance(1.3)
+                    # Recalculate scale factor
+                    scale_factor = max(target_size / img.width, target_size / img.height)
+
+                new_size = (int(img.width * scale_factor), int(img.height * scale_factor))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+                print(f"Preview upscaled from {original_size} to {new_size}")
+
+            # Final sharpening pass
+            enhancer = ImageEnhance.Sharpness(img)
+            img = enhancer.enhance(1.1)
+
+            # Cap at max size to prevent huge files
+            max_size = 2000
+            if img.width > max_size or img.height > max_size:
+                ratio = min(max_size / img.width, max_size / img.height)
+                new_size = (int(img.width * ratio), int(img.height * ratio))
+                img = img.resize(new_size, Image.Resampling.LANCZOS)
+
+            # Save to buffer with high quality PNG
+            buffer = io.BytesIO()
+            img.save(buffer, format="PNG", compress_level=1)  # Low compression for quality
+            buffer.seek(0)
+
+            return StreamingResponse(
+                buffer,
+                media_type="image/png",
+                headers={"Content-Disposition": f"inline; filename={image_id}.png"}
+            )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar preview: {str(e)}")

@@ -13,13 +13,15 @@ import {
   GeoJSONFeatureCollection,
   ChangeSummary,
   Bounds,
+  SatelliteChange,
 } from "@/lib/api";
 
 interface UploadedImage {
   id: string;
   filename: string;
   type: "before" | "after";
-  date?: string;
+  date?: string;          // Actual capture date from satellite
+  requestedDate?: string; // User-requested date
   satellite?: boolean;
 }
 
@@ -135,10 +137,10 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
         // Polling para verificar status
         let attempts = 0;
-        const maxAttempts = 120;
+        const maxAttempts = 300; // 300 * 200ms = 60s timeout
 
         while (attempts < maxAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 200)); // Poll every 200ms
           const status = await getSatelliteDownloadStatus(task.task_id);
 
           setState((prev) => ({
@@ -158,6 +160,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
                     filename: `sentinel2_${status.before_date}_before.tif`,
                     type: "before",
                     date: status.before_date,
+                    requestedDate: dateBefore,
                     satellite: true,
                   },
                   {
@@ -165,6 +168,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
                     filename: `sentinel2_${status.after_date}_after.tif`,
                     type: "after",
                     date: status.after_date,
+                    requestedDate: dateAfter,
                     satellite: true,
                   },
                 ],
@@ -220,12 +224,19 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           });
 
           // Convert changes array to GeoJSON FeatureCollection
+          // Backend returns type, area, confidence at root level, need to map to properties
           const changesGeoJSON: GeoJSONFeatureCollection = {
             type: "FeatureCollection",
-            features: result.changes.map((change) => ({
+            features: result.changes.map((change: SatelliteChange) => ({
               type: "Feature" as const,
               id: change.id || String(Math.random()),
-              properties: change.properties || {},
+              properties: {
+                type: change.type || "unknown",
+                area: change.area || 0,
+                confidence: change.confidence || 0,
+                is_georeferenced: change.is_georeferenced,
+                spectral: change.spectral,
+              },
               geometry: change.geometry || { type: "Polygon", coordinates: [] },
             })),
           };
@@ -238,9 +249,9 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
             by_type: {},
           };
 
-          // Count by type
-          result.changes.forEach((change) => {
-            const type = change.properties?.type || "unknown";
+          // Count by type - type is at root level in backend response
+          result.changes.forEach((change: SatelliteChange) => {
+            const type = change.type || "unknown";
             summary.by_type[type] = (summary.by_type[type] || 0) + 1;
           });
 
@@ -349,10 +360,10 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
 
         // Polling para verificar status do download
         let attempts = 0;
-        const maxDownloadAttempts = 120;
+        const maxDownloadAttempts = 300; // 300 * 200ms = 60s timeout
 
         while (attempts < maxDownloadAttempts) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await new Promise((resolve) => setTimeout(resolve, 200)); // Poll every 200ms
           const downloadStatus = await getSatelliteDownloadStatus(task.task_id);
 
           // Atualizar progresso (0-40% para download)
@@ -373,6 +384,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
                     filename: `sentinel2_${downloadStatus.before_date}_before.tif`,
                     type: "before",
                     date: downloadStatus.before_date,
+                    requestedDate: dateBefore,
                     satellite: true,
                   },
                   {
@@ -380,6 +392,7 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
                     filename: `sentinel2_${downloadStatus.after_date}_after.tif`,
                     type: "after",
                     date: downloadStatus.after_date,
+                    requestedDate: dateAfter,
                     satellite: true,
                   },
                 ],
@@ -412,12 +425,19 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
         setState((prev) => ({ ...prev, progress: 80 }));
 
         // Convert changes array to GeoJSON FeatureCollection
+        // Backend returns type, area, confidence at root level, need to map to properties
         const changesGeoJSON: GeoJSONFeatureCollection = {
           type: "FeatureCollection",
-          features: result.changes.map((change) => ({
+          features: result.changes.map((change: SatelliteChange) => ({
             type: "Feature" as const,
             id: change.id || String(Math.random()),
-            properties: change.properties || {},
+            properties: {
+              type: change.type || "unknown",
+              area: change.area || 0,
+              confidence: change.confidence || 0,
+              is_georeferenced: change.is_georeferenced,
+              spectral: change.spectral,
+            },
             geometry: change.geometry || { type: "Polygon", coordinates: [] },
           })),
         };
@@ -430,9 +450,9 @@ export function AnalysisProvider({ children }: { children: ReactNode }) {
           by_type: {},
         };
 
-        // Count by type
-        result.changes.forEach((change) => {
-          const type = change.properties?.type || "unknown";
+        // Count by type - type is at root level in backend response
+        result.changes.forEach((change: SatelliteChange) => {
+          const type = change.type || "unknown";
           summary.by_type[type] = (summary.by_type[type] || 0) + 1;
         });
 

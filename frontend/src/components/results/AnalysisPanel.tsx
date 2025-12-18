@@ -1,8 +1,9 @@
 "use client";
 
-import { Play, Loader2, MapPin, TreeDeciduous, Building, Trash2 } from "lucide-react";
+import { Play, Loader2, MapPin, TreeDeciduous, Building, Trash2, FileText } from "lucide-react";
 import { toast } from "sonner";
 import { useAnalysis } from "@/context/AnalysisContext";
+import { generatePDFReport } from "@/lib/pdfReport";
 
 // Tipos de mudança com ícones e cores
 const changeTypes = {
@@ -17,9 +18,12 @@ const changeTypes = {
 };
 
 export function AnalysisPanel() {
-  const { images, status, progress, summary, startDetection, error } = useAnalysis();
+  const { images, status, progress, summary, changes, startDetection, error, selectedBounds } = useAnalysis();
   const analyzing = status === "analyzing";
   const hasImages = images.length === 2;
+
+  // Check if images are from satellite (hide controls since SatellitePanel handles that)
+  const isSatelliteMode = images.some((img) => img.satellite);
 
   const handleAnalyze = async () => {
     try {
@@ -30,47 +34,78 @@ export function AnalysisPanel() {
     }
   };
 
+  const handleDownloadPDF = async () => {
+    try {
+      toast.loading("Gerando relatório PDF...");
+      const mapElement = document.querySelector("[data-map-container]") as HTMLElement | null;
+
+      await generatePDFReport({
+        images,
+        changes,
+        summary,
+        bounds: selectedBounds,
+        mapElement,
+      });
+
+      toast.dismiss();
+      toast.success("Relatório PDF gerado com sucesso!");
+    } catch (err) {
+      toast.dismiss();
+      toast.error(err instanceof Error ? err.message : "Erro ao gerar PDF");
+    }
+  };
+
+  // Hide the entire panel if in satellite mode and no results yet
+  if (isSatelliteMode && !summary) {
+    return null;
+  }
+
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-white">Análise</h2>
+      {/* Only show header and button for manual upload mode */}
+      {!isSatelliteMode && (
+        <>
+          <h2 className="text-lg font-semibold text-white">Análise</h2>
 
-      {/* Botão de análise */}
-      <button
-        onClick={handleAnalyze}
-        disabled={analyzing || !hasImages}
-        className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg transition-colors"
-      >
-        {analyzing ? (
-          <>
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Analisando... {progress}%
-          </>
-        ) : (
-          <>
-            <Play className="h-4 w-4" />
-            Detectar Mudanças
-          </>
-        )}
-      </button>
+          {/* Botão de análise */}
+          <button
+            onClick={handleAnalyze}
+            disabled={analyzing || !hasImages}
+            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg transition-colors"
+          >
+            {analyzing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Analisando... {progress}%
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4" />
+                Detectar Mudanças
+              </>
+            )}
+          </button>
 
-      {!hasImages && (
-        <p className="text-xs text-gray-500 text-center">
-          Envie as imagens &quot;antes&quot; e &quot;depois&quot; para iniciar
-        </p>
-      )}
+          {!hasImages && (
+            <p className="text-xs text-gray-500 text-center">
+              Envie as imagens &quot;antes&quot; e &quot;depois&quot; para iniciar
+            </p>
+          )}
 
-      {error && (
-        <p className="text-xs text-red-500 text-center">{error}</p>
-      )}
+          {error && (
+            <p className="text-xs text-red-500 text-center">{error}</p>
+          )}
 
-      {/* Progress bar */}
-      {analyzing && (
-        <div className="w-full bg-gray-700 rounded-full h-2">
-          <div
-            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+          {/* Progress bar */}
+          {analyzing && (
+            <div className="w-full bg-gray-700 rounded-full h-2">
+              <div
+                className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+          )}
+        </>
       )}
 
       {/* Resultados */}
@@ -86,9 +121,11 @@ export function AnalysisPanel() {
               </div>
               <div className="bg-gray-900 rounded p-3 text-center">
                 <p className="text-2xl font-bold text-white">
-                  {(summary.total_area / 1000).toFixed(1)}k
+                  {summary.total_area > 1000
+                    ? `${(summary.total_area / 1000).toFixed(1)}k`
+                    : summary.total_area.toFixed(0)}
                 </p>
-                <p className="text-xs text-gray-400">Área (px²)</p>
+                <p className="text-xs text-gray-400">Área (m²)</p>
               </div>
             </div>
           </div>
@@ -117,6 +154,15 @@ export function AnalysisPanel() {
               </div>
             </div>
           )}
+
+          {/* Botão de download PDF */}
+          <button
+            onClick={handleDownloadPDF}
+            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition-colors"
+          >
+            <FileText className="h-4 w-4" />
+            Baixar Relatório PDF
+          </button>
 
           {/* Legenda */}
           <div className="text-xs text-gray-500">

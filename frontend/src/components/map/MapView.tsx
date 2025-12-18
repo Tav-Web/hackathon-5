@@ -27,7 +27,7 @@ const changeTypeColors: Record<string, string> = {
 
 export default function MapView({
   changes,
-  center = [-15.5721297, -56.0574885],
+  center = [-15.68857, -56.0339319],
   zoom = 20,
   isSelectingBounds = false,
   selectedBounds,
@@ -102,12 +102,8 @@ export default function MapView({
     };
   }, []);
 
-  // Atualizar view quando center/zoom mudar
-  useEffect(() => {
-    if (mapRef.current) {
-      mapRef.current.setView(center, zoom);
-    }
-  }, [center, zoom]);
+  // Não atualizar view automaticamente - deixar o usuário controlar o mapa
+  // A view inicial é definida no initMap
 
   // Gerenciar seleção de bounds
   useEffect(() => {
@@ -206,9 +202,9 @@ export default function MapView({
     }
   }, [isSelectingBounds, onBoundsSelected]);
 
-  // Mostrar bounds selecionados
+  // Mostrar bounds selecionados (sem forçar centralização)
   useEffect(() => {
-    if (!mapRef.current || !selectedBounds || !leafletRef.current) return;
+    if (!mapRef.current || !leafletRef.current) return;
 
     const L = leafletRef.current;
     const map = mapRef.current;
@@ -216,7 +212,11 @@ export default function MapView({
     // Remover retângulo anterior
     if (selectionRectRef.current) {
       map.removeLayer(selectionRectRef.current);
+      selectionRectRef.current = null;
     }
+
+    // Se não há bounds selecionados, apenas limpar
+    if (!selectedBounds) return;
 
     // Criar novo retângulo
     const bounds = L.latLngBounds(
@@ -231,8 +231,7 @@ export default function MapView({
       dashArray: "5, 5",
     }).addTo(map);
 
-    // Centralizar no bounds
-    map.fitBounds(bounds, { padding: [50, 50] });
+    // NÃO centralizar automaticamente - deixar o usuário mover o mapa livremente
   }, [selectedBounds]);
 
   // Atualizar GeoJSON quando changes mudar
@@ -289,6 +288,7 @@ export default function MapView({
   return (
     <div
       ref={containerRef}
+      data-map-container
       className="w-full h-full"
       style={{ minHeight: "500px" }}
     />

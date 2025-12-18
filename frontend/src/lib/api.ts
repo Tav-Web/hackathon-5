@@ -197,13 +197,35 @@ export interface AnalysisResponse {
   total_area_changed: number;
 }
 
+// Satellite Change (raw response from backend)
+export interface SatelliteChange {
+  id: string;
+  type: string;
+  area: number;
+  area_pixels: number;
+  centroid: [number, number];
+  confidence: number;
+  geometry: {
+    type: string;
+    coordinates: number[][][];
+  };
+  is_georeferenced: boolean;
+  spectral?: {
+    ndvi_before: number;
+    ndvi_after: number;
+    ndvi_change: number;
+    ndwi_change: number;
+    ndbi_change?: number;
+  };
+}
+
 // Satellite Analysis Response (from /satellite/analyze)
 export interface SatelliteAnalysisResponse {
   id: string;
   status: string;
   total_changes: number;
   total_area_changed: number;
-  changes: GeoJSONFeature[];
+  changes: SatelliteChange[];
 }
 
 // Satellite analysis (synchronous - returns results immediately)
@@ -231,4 +253,23 @@ export async function startAnalysis(data: AnalysisRequest): Promise<AnalysisResp
     total_changes: satResponse.total_changes,
     total_area_changed: satResponse.total_area_changed,
   };
+}
+
+// Get satellite image preview URL
+export function getSatelliteImagePreviewUrl(imageId: string): string {
+  return `${API_URL}/satellite/image/${imageId}/preview`;
+}
+
+// Fetch satellite image as base64 for PDF
+export async function getSatelliteImageBase64(imageId: string): Promise<string> {
+  const response = await api.get(`/satellite/image/${imageId}/preview`, {
+    responseType: "arraybuffer",
+  });
+  const base64 = btoa(
+    new Uint8Array(response.data).reduce(
+      (data, byte) => data + String.fromCharCode(byte),
+      ""
+    )
+  );
+  return `data:image/png;base64,${base64}`;
 }

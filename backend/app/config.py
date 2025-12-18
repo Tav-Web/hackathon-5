@@ -37,6 +37,18 @@ class Settings(BaseSettings):
     GEE_PROJECT_ID: str = "ee-hackathon5"
     GEE_SERVICE_ACCOUNT_KEY: str = ""  # Path to service account JSON or empty for personal auth
 
+    # Copernicus Data Space / Sentinel Hub (free access)
+    # Register at: https://dataspace.copernicus.eu/
+    COPERNICUS_CLIENT_ID: str = ""
+    COPERNICUS_CLIENT_SECRET: str = ""
+
+    # Sentinel Hub Commercial (alternative)
+    SH_CLIENT_ID: str = ""
+    SH_CLIENT_SECRET: str = ""
+
+    # Satellite data source: "earth_engine" or "sentinel_hub"
+    SATELLITE_SOURCE: str = "earth_engine"
+
     # OpenRouter (LLM)
     OPENROUTER_API_KEY: str = ""
     OPENROUTER_MODEL: str = "google/gemini-3-flash-preview"

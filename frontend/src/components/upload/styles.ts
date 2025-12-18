@@ -48,6 +48,8 @@ export const ImageSlot = styled(Box)`
   display: flex;
   flex-direction: column;
   gap: 8px;
+  min-width: 0;
+  overflow: hidden;
 `;
 
 export const SlotLabel = styled(Typography)`
@@ -61,6 +63,8 @@ export const ImagePreview = styled(Box)`
   background-color: #1f2937;
   border-radius: 8px;
   padding: 12px;
+  overflow: hidden;
+  min-width: 0;
 `;
 
 export const ImagePreviewIcon = styled(Box)<{ $color: string }>`
@@ -74,6 +78,8 @@ export const ImageFilename = styled(Typography)`
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
+  display: block;
 `;
 
 export const RemoveButton = styled.button`

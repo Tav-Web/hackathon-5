@@ -32,7 +32,7 @@ export const AutoAnalysisHeader = styled(Box)`
   padding-bottom: 8px;
 `;
 
-export const AutoAnalysisTitle = styled(Typography)`
+export const AutoAnalysisTitle = styled(Box)`
   font-size: 14px;
   display: flex;
   align-items: center;

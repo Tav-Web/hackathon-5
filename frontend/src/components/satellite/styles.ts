@@ -349,6 +349,9 @@ export const DateInputLabel = styled(Typography)`
   font-weight: 500;
   color: #a1a1aa;
   opacity: 0.7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `;
 
 export const DateInputContainer = styled(Box)`

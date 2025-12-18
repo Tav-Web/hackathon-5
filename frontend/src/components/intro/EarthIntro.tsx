@@ -364,8 +364,11 @@ export function EarthIntro({ onComplete }: EarthIntroProps) {
   const [showContent, setShowContent] = useState(false);
   const [isZooming, setIsZooming] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   useEffect(() => {
+    // Mark as mounted to render stars only on client (avoids hydration mismatch)
+    setIsMounted(true);
     // Show content after Earth appears
     const timer = setTimeout(() => setShowContent(true), 500);
     return () => clearTimeout(timer);
@@ -388,7 +391,8 @@ export function EarthIntro({ onComplete }: EarthIntroProps) {
   return (
     <IntroContainer $isExiting={isExiting}>
       <StarsContainer>
-        {STARS.map((star) => (
+        {/* Render stars only on client to avoid hydration mismatch */}
+        {isMounted && STARS.map((star) => (
           <Star
             key={star.id}
             $size={star.size}

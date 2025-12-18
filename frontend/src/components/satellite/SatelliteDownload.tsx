@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Satellite, Download, Loader2, MapPin, Calendar } from "lucide-react";
+import { Satellite, Download, Loader2, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import {
   downloadSatelliteImages,
@@ -10,6 +10,7 @@ import {
   SatelliteSource,
   api,
 } from "@/lib/api";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   DownloadContainer,
   HeaderRow,
@@ -21,9 +22,6 @@ import {
   DatesGrid,
   DateSection,
   DateLabel,
-  DateInputWrapper,
-  DateIconWrapper,
-  DateInput,
   DownloadActionButton,
   FooterNote,
   SourceSelect,
@@ -201,31 +199,22 @@ export function SatelliteDownload({ selectedBounds, onBoundsSelect }: SatelliteD
       <DatesGrid>
         <DateSection>
           <DateLabel>Data Antes</DateLabel>
-          <DateInputWrapper>
-            <DateIconWrapper>
-              <Calendar className="h-4 w-4" />
-            </DateIconWrapper>
-            <DateInput
-              type="date"
-              value={dateBefore}
-              onChange={(e) => setDateBefore(e.target.value)}
-              max={today}
-            />
-          </DateInputWrapper>
+          <DatePicker
+            value={dateBefore}
+            onChange={setDateBefore}
+            placeholder="Selecione a data"
+            maxDate={today}
+          />
         </DateSection>
         <DateSection>
-          <DateLabel>Data Depois</DateLabel>
-          <DateInputWrapper>
-            <DateIconWrapper>
-              <Calendar className="h-4 w-4" />
-            </DateIconWrapper>
-            <DateInput
-              type="date"
-              value={dateAfter}
-              onChange={(e) => setDateAfter(e.target.value)}
-              max={today}
-            />
-          </DateInputWrapper>
+          <DateLabel>Depois de</DateLabel>
+          <DatePicker
+            value={dateAfter}
+            onChange={setDateAfter}
+            placeholder="Selecione a data"
+            minDate={dateBefore || undefined}
+            maxDate={today}
+          />
         </DateSection>
       </DatesGrid>
 

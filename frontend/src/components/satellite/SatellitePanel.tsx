@@ -6,7 +6,6 @@ import {
   Search,
   Loader2,
   MapPin,
-  Calendar,
   AlertCircle,
   Eye,
   X,
@@ -17,6 +16,7 @@ import {
 import { toast } from "sonner";
 import { useAnalysis } from "@/context/AnalysisContext";
 import { getSatelliteImagePreviewUrl, SatelliteSource } from "@/lib/api";
+import { DatePicker } from "@/components/ui/date-picker";
 
 // Styled components
 import {
@@ -45,9 +45,6 @@ import {
   DateInputsGrid,
   DateInputWrapper,
   DateInputLabel,
-  DateInputContainer,
-  DateInputIcon,
-  DateInput,
   SummaryCard,
   SummaryGrid,
   SummaryItem,
@@ -500,41 +497,31 @@ export function SatellitePanel({ onNewAnalysis }: SatellitePanelProps = {}) {
           <DateInputsGrid>
             <DateInputWrapper>
               <DateInputLabel>Data Antes (partir de 2017)</DateInputLabel>
-              <DateInputContainer>
-                <DateInputIcon>
-                  <Calendar className="h-4 w-4" />
-                </DateInputIcon>
-                <DateInput
-                  type="date"
-                  value={dateBefore}
-                  onChange={(e) => setDateBefore(e.target.value)}
-                  min={minDate}
-                  max={today}
-                  disabled={isProcessing}
-                />
-              </DateInputContainer>
+              <DatePicker
+                value={dateBefore}
+                onChange={setDateBefore}
+                placeholder="Selecione a data"
+                minDate={minDate}
+                maxDate={today}
+                disabled={isProcessing}
+              />
             </DateInputWrapper>
             <DateInputWrapper>
               <DateInputLabel>
-                Data{" "}
+                Depois de{" "}
                 {dateBefore &&
                   `(após ${new Date(
                     dateBefore + "T00:00:00"
                   ).toLocaleDateString("pt-BR")})`}
               </DateInputLabel>
-              <DateInputContainer>
-                <DateInputIcon>
-                  <Calendar className="h-4 w-4" />
-                </DateInputIcon>
-                <DateInput
-                  type="date"
-                  value={dateAfter}
-                  onChange={(e) => setDateAfter(e.target.value)}
-                  min={minDateAfter}
-                  max={today}
-                  disabled={isProcessing}
-                />
-              </DateInputContainer>
+              <DatePicker
+                value={dateAfter}
+                onChange={setDateAfter}
+                placeholder="Selecione a data"
+                minDate={minDateAfter}
+                maxDate={today}
+                disabled={isProcessing}
+              />
             </DateInputWrapper>
           </DateInputsGrid>
         </Section>

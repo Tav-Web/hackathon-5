@@ -1,20 +1,22 @@
 "use client";
 
-import { Play, Loader2, MapPin, TreeDeciduous, Building, Trash2, FileText } from "lucide-react";
+import { Play, Loader2, MapPin, TreeDeciduous, Building, Trash2, FileText, Droplets } from "lucide-react";
 import { toast } from "sonner";
 import { useAnalysis } from "@/context/AnalysisContext";
 import { generatePDFReport } from "@/lib/pdfReport";
 
-// Tipos de mudança com ícones e cores
+// Tipos de mudança com ícones, cores e labels traduzidos
 const changeTypes = {
   construction: { label: "Construção", icon: Building, color: "text-red-500" },
   demolition: { label: "Demolição", icon: Trash2, color: "text-orange-500" },
   deforestation: { label: "Desmatamento", icon: TreeDeciduous, color: "text-red-600" },
-  vegetation_growth: { label: "Vegetação", icon: TreeDeciduous, color: "text-green-500" },
-  soil_movement: { label: "Solo", icon: MapPin, color: "text-amber-600" },
+  vegetation_growth: { label: "Crescimento de Vegetação", icon: TreeDeciduous, color: "text-green-500" },
+  vegetation_loss: { label: "Perda de Vegetação", icon: TreeDeciduous, color: "text-red-600" },
+  soil_movement: { label: "Movimentação de Solo", icon: MapPin, color: "text-amber-600" },
   debris: { label: "Entulho", icon: Trash2, color: "text-gray-500" },
   urban_expansion: { label: "Expansão Urbana", icon: Building, color: "text-purple-500" },
-  unknown: { label: "Desconhecido", icon: MapPin, color: "text-blue-500" },
+  water_change: { label: "Alteração Hídrica", icon: Droplets, color: "text-blue-500" },
+  unknown: { label: "Não Classificado", icon: MapPin, color: "text-blue-500" },
 };
 
 export function AnalysisPanel() {
@@ -71,17 +73,17 @@ export function AnalysisPanel() {
           <button
             onClick={handleAnalyze}
             disabled={analyzing || !hasImages}
-            className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-700 disabled:cursor-not-allowed text-white py-2 px-4 rounded-lg transition-colors"
+            className="w-full flex items-center justify-center gap-2 bg-primary hover:bg-primary/90 disabled:bg-gray-700 disabled:cursor-not-allowed text-white py-3 px-4 rounded-lg transition-colors font-medium"
           >
             {analyzing ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Analisando... {progress}%
+                Detectando alterações... {progress}%
               </>
             ) : (
               <>
                 <Play className="h-4 w-4" />
-                Detectar Mudanças
+                🔍 Analisar Área
               </>
             )}
           </button>
@@ -111,9 +113,9 @@ export function AnalysisPanel() {
       {/* Resultados */}
       {summary && (
         <div className="space-y-4">
-          {/* Resumo */}
+          {/* Resumo da Análise */}
           <div className="bg-gray-800 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-300 mb-3">Resumo</h3>
+            <h3 className="text-sm font-medium text-gray-300 mb-3">Resumo da Análise</h3>
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-gray-900 rounded p-3 text-center">
                 <p className="text-2xl font-bold text-white">{summary.total_changes}</p>
@@ -161,11 +163,11 @@ export function AnalysisPanel() {
             className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white py-2 px-4 rounded-lg transition-colors"
           >
             <FileText className="h-4 w-4" />
-            Baixar Relatório PDF
+            Baixar Relatório da Análise
           </button>
 
-          {/* Legenda */}
-          <div className="text-xs text-gray-500">
+          {/* Dica de interação */}
+          <div className="text-xs text-muted-foreground opacity-70">
             <p>Clique nas áreas no mapa para ver detalhes</p>
           </div>
         </div>

@@ -16,7 +16,9 @@ import { MetricsCards } from "@/components/results/MetricsCards";
 import { ImageComparisonSlider } from "@/components/comparison/ImageComparisonSlider";
 import { useGeeAnalysis } from "@/hooks/useGeeAnalysis";
 import { useKeyboardShortcuts, useKeyboardEvent, KEYBOARD_EVENTS } from "@/hooks/useKeyboardShortcuts";
-import { getSatelliteImagePreviewUrl } from "@/lib/api";
+import { getSatelliteImagePreviewUrl, SatelliteSource } from "@/lib/api";
+import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 // Carregar mapa dinamicamente (SSR disabled para Leaflet)
 const MapView = dynamic(() => import("@/components/map/MapView"), {
@@ -40,6 +42,13 @@ export default function Home() {
     setIsSelectingBounds,
     analysisId: satelliteAnalysisId,
     status: satelliteStatus,
+    selectedChangeType,
+    // Multi-source comparison
+    imagesBySource,
+    activeComparisonSource,
+    loadSourceImages,
+    setActiveComparisonSource,
+    lastAnalysisDates,
   } = useAnalysis();
 
   const [activeTab, setActiveTab] = useState<MainTab>("satellite");
@@ -58,16 +67,37 @@ export default function Home() {
   const chatAnalysisId = geeAnalysis.analysisId || (satelliteAnalysisId ? parseInt(satelliteAnalysisId) : null);
   const hasCompletedAnalysis = geeAnalysis.status === "completed" || satelliteStatus === "completed";
 
-  // Get before/after images for comparison (from satellite download context)
+  // Get before/after images for comparison based on active source
   const context = useAnalysis();
-  const beforeImageUrl = context.images.find(img => img.type === "before")?.id
-    ? getSatelliteImagePreviewUrl(context.images.find(img => img.type === "before")!.id)
+  const activeSourceData = imagesBySource[activeComparisonSource];
+  const comparisonBefore = activeSourceData?.before;
+  const comparisonAfter = activeSourceData?.after;
+
+  const beforeImageUrl = comparisonBefore?.id
+    ? getSatelliteImagePreviewUrl(comparisonBefore.id)
     : null;
-  const afterImageUrl = context.images.find(img => img.type === "after")?.id
-    ? getSatelliteImagePreviewUrl(context.images.find(img => img.type === "after")!.id)
+  const afterImageUrl = comparisonAfter?.id
+    ? getSatelliteImagePreviewUrl(comparisonAfter.id)
     : null;
 
-  const canShowComparison = beforeImageUrl && afterImageUrl;
+  // Check if any source has images loaded
+  const hasAnySourceLoaded = Object.values(imagesBySource).some(s => s.status === "loaded");
+  const canShowComparison = hasAnySourceLoaded;
+
+  // Handler for source tab click
+  const handleSourceClick = async (source: SatelliteSource) => {
+    setActiveComparisonSource(source);
+
+    // If not loaded yet or had error, load/retry it
+    const status = imagesBySource[source].status;
+    if ((status === "idle" || status === "error") && lastAnalysisDates) {
+      try {
+        await loadSourceImages(source);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : `Erro ao carregar ${source}`);
+      }
+    }
+  };
 
   // Keyboard shortcuts
   useKeyboardShortcuts();
@@ -129,11 +159,11 @@ export default function Home() {
       </header>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex overflow-hidden min-h-0">
         {/* Sidebar */}
-        <aside className="w-96 border-r flex flex-col bg-card">
+        <aside className="w-96 border-r flex flex-col bg-card overflow-hidden">
           {/* Tabs */}
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as MainTab)} className="flex flex-col h-full">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as MainTab)} className="flex flex-col h-full min-h-0">
             <TabsList className="grid w-full grid-cols-2 m-2 mb-0">
               <TabsTrigger value="satellite" className="text-xs">
                 <Satellite className="h-3 w-3 mr-1" />
@@ -146,9 +176,9 @@ export default function Home() {
             </TabsList>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-4 min-h-0">
               <TabsContent value="satellite" className="mt-0 space-y-4">
-                <SatellitePanel />
+                <SatellitePanel onNewAnalysis={() => setViewMode("map")} />
                 {/* AnalysisPanel renderizado dentro do SatellitePanel quando necessário */}
               </TabsContent>
               <TabsContent value="upload" className="mt-0 space-y-4">
@@ -161,25 +191,27 @@ export default function Home() {
 
         {/* Main Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* View Mode Toggle */}
+          {/* Top Bar - View Mode Toggle only */}
           {canShowComparison && (
-            <div className="bg-card border-b p-2 flex items-center justify-center gap-2">
-              <Button
-                variant={viewMode === "map" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setViewMode("map")}
-              >
-                <Map className="h-4 w-4 mr-1" />
-                Mapa
-              </Button>
-              <Button
-                variant={viewMode === "comparison" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setViewMode("comparison")}
-              >
-                <SplitSquareVertical className="h-4 w-4 mr-1" />
-                Comparação
-              </Button>
+            <div className="bg-card border-b p-2 flex items-center justify-end">
+              <div className="flex items-center gap-1">
+                <Button
+                  variant={viewMode === "map" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setViewMode("map")}
+                >
+                  <Map className="h-4 w-4 mr-1" />
+                  Mapa
+                </Button>
+                <Button
+                  variant={viewMode === "comparison" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setViewMode("comparison")}
+                >
+                  <SplitSquareVertical className="h-4 w-4 mr-1" />
+                  Comparação
+                </Button>
+              </div>
             </div>
           )}
 
@@ -195,6 +227,8 @@ export default function Home() {
                     setSelectedBounds(bounds);
                     setIsSelectingBounds(false);
                   }}
+                  isLoading={satelliteStatus === "downloading" || satelliteStatus === "analyzing"}
+                  selectedChangeType={selectedChangeType}
                 />
                 {/* Selection Instruction */}
                 {isSelectingBounds && (
@@ -203,14 +237,100 @@ export default function Home() {
                   </div>
                 )}
               </>
-            ) : canShowComparison && beforeImageUrl && afterImageUrl ? (
-              <ImageComparisonSlider
-                beforeImage={beforeImageUrl}
-                afterImage={afterImageUrl}
-                beforeLabel="Antes"
-                afterLabel="Depois"
-                className="w-full h-full"
-              />
+            ) : canShowComparison ? (
+              <div className="relative w-full h-full flex flex-col">
+                {/* Source Selection Tabs - Only in comparison view */}
+                <div className="bg-card/80 backdrop-blur-sm border-b p-2 flex items-center justify-center gap-1 z-10">
+                  <Button
+                    variant={activeComparisonSource === "earth_engine" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleSourceClick("earth_engine")}
+                    disabled={imagesBySource.earth_engine.status === "loading"}
+                    className={`text-xs ${activeComparisonSource === "earth_engine" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                  >
+                    {imagesBySource.earth_engine.status === "loading" ? (
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    ) : (
+                      <Satellite className="h-3 w-3 mr-1" />
+                    )}
+                    Earth Engine
+                    {imagesBySource.earth_engine.status === "loaded" && " ✓"}
+                  </Button>
+                  <Button
+                    variant={activeComparisonSource === "sentinel" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleSourceClick("sentinel")}
+                    disabled={imagesBySource.sentinel.status === "loading" || !lastAnalysisDates}
+                    className={`text-xs ${activeComparisonSource === "sentinel" ? "bg-blue-600 hover:bg-blue-700" : ""}`}
+                  >
+                    {imagesBySource.sentinel.status === "loading" ? (
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    ) : null}
+                    Sentinel Hub
+                    {imagesBySource.sentinel.status === "loaded" && " ✓"}
+                    {imagesBySource.sentinel.status === "error" && " ✗"}
+                  </Button>
+                  <Button
+                    variant={activeComparisonSource === "planet" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => handleSourceClick("planet")}
+                    disabled={imagesBySource.planet.status === "loading" || !lastAnalysisDates}
+                    className={`text-xs ${activeComparisonSource === "planet" ? "bg-purple-600 hover:bg-purple-700" : ""}`}
+                  >
+                    {imagesBySource.planet.status === "loading" ? (
+                      <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                    ) : null}
+                    Planet
+                    {imagesBySource.planet.status === "loaded" && " ✓"}
+                    {imagesBySource.planet.status === "error" && " ✗"}
+                  </Button>
+                </div>
+
+                {/* Comparison Content */}
+                <div className="flex-1 relative">
+                  {activeSourceData.status === "loading" ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="flex flex-col items-center gap-3">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <p className="text-muted-foreground">Carregando imagens de {activeComparisonSource}...</p>
+                      </div>
+                    </div>
+                  ) : activeSourceData.status === "error" ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="flex flex-col items-center gap-3 text-center">
+                        <p className="text-red-400">{activeSourceData.error || "Erro ao carregar imagens"}</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSourceClick(activeComparisonSource)}
+                        >
+                          Tentar novamente
+                        </Button>
+                      </div>
+                    </div>
+                  ) : beforeImageUrl && afterImageUrl ? (
+                    <ImageComparisonSlider
+                      beforeImage={beforeImageUrl}
+                      afterImage={afterImageUrl}
+                      beforeLabel={
+                        comparisonBefore?.date
+                          ? new Date(comparisonBefore.date + "T00:00:00").toLocaleDateString("pt-BR")
+                          : "Antes"
+                      }
+                      afterLabel={
+                        comparisonAfter?.date
+                          ? new Date(comparisonAfter.date + "T00:00:00").toLocaleDateString("pt-BR")
+                          : "Depois"
+                      }
+                      className="w-full h-full"
+                    />
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      <p>Selecione uma fonte para ver a comparação</p>
+                    </div>
+                  )}
+                </div>
+              </div>
             ) : (
               <div className="flex items-center justify-center h-full text-muted-foreground">
                 <p>Faça o download das imagens para ver a comparação</p>

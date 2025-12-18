@@ -26,7 +26,8 @@ class PlanetService:
         """Get or create Planet client."""
         if cls._client is None:
             try:
-                from planet import Planet
+                from planet import Auth
+                from planet.sync.client import Planet, Session
             except ImportError:
                 raise ImportError(
                     "Planet SDK not installed. Run: pip install planet>=2.0.0"
@@ -43,7 +44,10 @@ class PlanetService:
                     "https://www.planet.com/pulse/announcing-planets-developer-trial-program/"
                 )
 
-            cls._client = Planet(api_key=api_key)
+            # Planet SDK v3+ uses Session with Auth for authentication
+            auth = Auth.from_key(api_key)
+            session = Session(auth=auth)
+            cls._client = Planet(session=session)
             print(f"Planet client initialized with API key: {api_key[:10]}...")
 
         return cls._client
@@ -97,9 +101,10 @@ class PlanetService:
         }
 
         # Build search filter
+        # Note: Removed permission_filter() - it filters out all images for Developer Trial keys
+        # We'll handle download permission errors separately
         sfilter = data_filter.and_filter(
             [
-                data_filter.permission_filter(),
                 data_filter.geometry_filter(geom),
                 data_filter.date_range_filter(
                     "acquired",
@@ -130,6 +135,103 @@ class PlanetService:
         results.sort(key=lambda x: x["cloud_cover"])
 
         return results
+
+    @classmethod
+    async def search_closest_image(
+        cls,
+        bounds: tuple[float, float, float, float],
+        target_date: str,
+        max_days_range: int = 60,
+        cloud_cover_max: int = 30,
+    ) -> Optional[dict]:
+        """
+        Search for the image closest to a target date.
+
+        Args:
+            bounds: (min_lon, min_lat, max_lon, max_lat)
+            target_date: Target date (YYYY-MM-DD)
+            max_days_range: Maximum days to search before/after target
+            cloud_cover_max: Maximum cloud cover percentage
+
+        Returns:
+            Best matching image (closest to target date with low cloud cover)
+        """
+        from planet import data_filter
+
+        pl = cls.get_client()
+        target_dt = datetime.fromisoformat(target_date)
+
+        min_lon, min_lat, max_lon, max_lat = bounds
+
+        # Create GeoJSON geometry for the bounding box
+        geom = {
+            "type": "Polygon",
+            "coordinates": [
+                [
+                    [min_lon, min_lat],
+                    [max_lon, min_lat],
+                    [max_lon, max_lat],
+                    [min_lon, max_lat],
+                    [min_lon, min_lat],
+                ]
+            ],
+        }
+
+        # Search in a wider range around target date
+        date_start = (target_dt - timedelta(days=max_days_range)).strftime("%Y-%m-%d")
+        date_end = (target_dt + timedelta(days=max_days_range)).strftime("%Y-%m-%d")
+
+        # Note: Removed permission_filter() - it filters out all images for Developer Trial keys
+        # We'll handle download permission errors separately
+        sfilter = data_filter.and_filter(
+            [
+                data_filter.geometry_filter(geom),
+                data_filter.date_range_filter(
+                    "acquired",
+                    gt=datetime.fromisoformat(date_start),
+                    lt=datetime.fromisoformat(date_end) + timedelta(days=1),
+                ),
+                data_filter.range_filter("cloud_cover", lt=cloud_cover_max / 100),
+            ]
+        )
+
+        results = []
+        try:
+            for item in pl.data.search(["PSScene"], search_filter=sfilter, limit=50):
+                acq_datetime = item["properties"]["acquired"]
+                if "T" in acq_datetime:
+                    acq_date = datetime.fromisoformat(acq_datetime.replace("Z", "+00:00")).replace(tzinfo=None)
+                else:
+                    acq_date = datetime.fromisoformat(acq_datetime)
+
+                # Calculate days difference from target
+                days_diff = abs((acq_date - target_dt).days)
+
+                results.append(
+                    {
+                        "id": item["id"],
+                        "datetime": acq_datetime,
+                        "cloud_cover": item["properties"].get("cloud_cover", 0) * 100,
+                        "geometry": item["geometry"],
+                        "properties": item["properties"],
+                        "days_from_target": days_diff,
+                    }
+                )
+        except Exception as e:
+            print(f"Error searching Planet images: {e}")
+            return None
+
+        if not results:
+            print(f"No Planet images found within {max_days_range} days of {target_date}")
+            return None
+
+        # Sort by: 1) days from target (closest first), 2) cloud cover (lowest)
+        results.sort(key=lambda x: (x["days_from_target"], x["cloud_cover"]))
+
+        best = results[0]
+        print(f"Found Planet image {best['id']} - {best['days_from_target']} days from target, {best['cloud_cover']:.1f}% clouds")
+
+        return best
 
     @classmethod
     async def download_image(
@@ -176,10 +278,23 @@ class PlanetService:
             asset_type = "ortho_visual"
             try:
                 asset = pl.data.get_asset("PSScene", item_id, asset_type)
-            except Exception:
+            except Exception as e:
+                # Check if it's a permission error (Developer Trial limitation)
+                if "must be one of []" in str(e):
+                    print(f"Planet API permission denied: Developer Trial cannot download images")
+                    raise PermissionError(
+                        "Planet Developer Trial não permite download. Use Earth Engine ou Sentinel."
+                    )
                 # Try alternative asset type
                 asset_type = "ortho_analytic_4b"
-                asset = pl.data.get_asset("PSScene", item_id, asset_type)
+                try:
+                    asset = pl.data.get_asset("PSScene", item_id, asset_type)
+                except Exception as e2:
+                    if "must be one of []" in str(e2):
+                        raise PermissionError(
+                            "Planet Developer Trial não permite download. Use Earth Engine ou Sentinel."
+                        )
+                    raise
 
             # Activate asset if needed
             if asset.get("status") != "active":
@@ -258,55 +373,182 @@ class PlanetService:
             return None
 
     @classmethod
+    async def download_closest_image(
+        cls,
+        bounds: tuple[float, float, float, float],
+        target_date: str,
+        output_dir: Optional[str] = None,
+        max_days_range: int = 60,
+        cloud_cover_max: int = 30,
+    ) -> Optional[dict]:
+        """
+        Download the image closest to a target date.
+
+        Args:
+            bounds: (min_lon, min_lat, max_lon, max_lat)
+            target_date: Target date (YYYY-MM-DD)
+            output_dir: Directory to save the image
+            max_days_range: Maximum days to search before/after target
+            cloud_cover_max: Maximum cloud cover percentage
+
+        Returns:
+            dict with image info and filepath, or None if failed
+        """
+        try:
+            pl = cls.get_client()
+            min_lon, min_lat, max_lon, max_lat = bounds
+
+            # Find closest image
+            best_image = await cls.search_closest_image(
+                bounds, target_date, max_days_range, cloud_cover_max
+            )
+
+            if not best_image:
+                return None
+
+            item_id = best_image["id"]
+            print(f"Downloading Planet image: {item_id}")
+
+            # Get asset (ortho_visual for RGB preview)
+            asset_type = "ortho_visual"
+            try:
+                asset = pl.data.get_asset("PSScene", item_id, asset_type)
+            except Exception as e:
+                # Check if it's a permission error (Developer Trial limitation)
+                if "must be one of []" in str(e):
+                    print(f"Planet API permission denied: Developer Trial cannot download images")
+                    raise PermissionError(
+                        "Planet Developer Trial não permite download. Use Earth Engine ou Sentinel."
+                    )
+                # Try alternative asset type
+                asset_type = "ortho_analytic_4b"
+                try:
+                    asset = pl.data.get_asset("PSScene", item_id, asset_type)
+                except Exception as e2:
+                    if "must be one of []" in str(e2):
+                        raise PermissionError(
+                            "Planet Developer Trial não permite download. Use Earth Engine ou Sentinel."
+                        )
+                    raise
+
+            # Activate asset if needed
+            if asset.get("status") != "active":
+                print(f"Activating Planet asset {asset_type}...")
+                pl.data.activate_asset(asset)
+                asset = pl.data.wait_asset(asset, callback=lambda a: print(f"  Status: {a.get('status')}"))
+
+            # Download asset
+            output_dir = output_dir or getattr(settings, "UPLOAD_DIR", "/tmp/hackathon_uploads")
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+
+            print(f"Downloading Planet image to {output_dir}...")
+            downloaded_path = pl.data.download_asset(asset, directory=output_dir)
+
+            # Get image dimensions
+            width = best_image["properties"].get("columns", 0)
+            height = best_image["properties"].get("rows", 0)
+
+            if width == 0 or height == 0:
+                try:
+                    with rasterio.open(downloaded_path) as src:
+                        width = src.width
+                        height = src.height
+                except Exception:
+                    import math
+                    center_lat = (min_lat + max_lat) / 2
+                    cos_lat = math.cos(math.radians(center_lat))
+                    width_km = (max_lon - min_lon) * 111 * cos_lat
+                    height_km = (max_lat - min_lat) * 111
+                    width = int(width_km * 1000 / 3)
+                    height = int(height_km * 1000 / 3)
+
+            # Parse acquisition date
+            acq_datetime = best_image["datetime"]
+            if "T" in acq_datetime:
+                image_date = acq_datetime.split("T")[0]
+            else:
+                image_date = acq_datetime[:10]
+
+            image_id = str(uuid.uuid4())
+
+            return {
+                "id": image_id,
+                "filepath": str(downloaded_path),
+                "date": image_date,
+                "target_date": target_date,
+                "days_from_target": best_image.get("days_from_target", 0),
+                "bounds": {
+                    "min_lon": min_lon,
+                    "min_lat": min_lat,
+                    "max_lon": max_lon,
+                    "max_lat": max_lat,
+                },
+                "original_bounds": {
+                    "min_lon": min_lon,
+                    "min_lat": min_lat,
+                    "max_lon": max_lon,
+                    "max_lat": max_lat,
+                },
+                "crs": "EPSG:4326",
+                "width": width,
+                "height": height,
+                "scale": 3,
+                "satellite": "PlanetScope",
+                "cloud_cover": best_image["cloud_cover"],
+                "source": "Planet",
+                "planet_id": item_id,
+            }
+
+        except Exception as e:
+            print(f"Error downloading closest image from Planet: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    @classmethod
     async def download_image_pair(
         cls,
         bounds: tuple[float, float, float, float],
         date_before: str,
         date_after: str,
-        date_range_days: int = 30,
+        date_range_days: int = 60,
         output_dir: Optional[str] = None,
     ) -> Optional[dict]:
         """
         Download a pair of images for before/after comparison.
+        Finds the closest available images to each target date.
 
         Args:
             bounds: Bounding box
             date_before: Target date for "before" image
             date_after: Target date for "after" image
-            date_range_days: Number of days to search around target date
+            date_range_days: Maximum days to search around target date
             output_dir: Directory to save images
 
         Returns:
             dict with before and after image info
         """
-        # Calculate date ranges
-        date_before_dt = datetime.strptime(date_before, "%Y-%m-%d")
-        date_after_dt = datetime.strptime(date_after, "%Y-%m-%d")
-        delta = timedelta(days=date_range_days)
-
-        # Download before image
-        before_start = (date_before_dt - delta).strftime("%Y-%m-%d")
-        before_end = (date_before_dt + delta).strftime("%Y-%m-%d")
-        print(f"Searching Planet images for 'before': {before_start} to {before_end}")
-        before_image = await cls.download_image(
-            bounds, before_start, before_end, output_dir
+        print(f"Searching Planet image closest to 'before' date: {date_before}")
+        before_image = await cls.download_closest_image(
+            bounds, date_before, output_dir, max_days_range=date_range_days
         )
 
         if before_image is None:
             print("Failed to download 'before' image from Planet")
             return None
 
-        # Download after image
-        after_start = (date_after_dt - delta).strftime("%Y-%m-%d")
-        after_end = (date_after_dt + delta).strftime("%Y-%m-%d")
-        print(f"Searching Planet images for 'after': {after_start} to {after_end}")
-        after_image = await cls.download_image(
-            bounds, after_start, after_end, output_dir
+        print(f"  -> Found image from {before_image['date']} ({before_image['days_from_target']} days from target)")
+
+        print(f"Searching Planet image closest to 'after' date: {date_after}")
+        after_image = await cls.download_closest_image(
+            bounds, date_after, output_dir, max_days_range=date_range_days
         )
 
         if after_image is None:
             print("Failed to download 'after' image from Planet")
             return None
+
+        print(f"  -> Found image from {after_image['date']} ({after_image['days_from_target']} days from target)")
 
         return {
             "before": before_image,

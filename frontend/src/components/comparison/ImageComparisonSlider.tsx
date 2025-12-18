@@ -86,24 +86,24 @@ export function ImageComparisonSlider({
       onTouchStart={handleTouchStart}
     >
       {/* After Image (Background) */}
-      <div className="absolute inset-0">
+      <div className="absolute inset-0 flex items-center justify-center bg-black">
         <img
           src={afterImage}
           alt={afterLabel}
-          className="w-full h-full object-cover"
+          className="max-w-full max-h-full object-contain"
           draggable={false}
         />
       </div>
 
       {/* Before Image (Clipped) */}
       <div
-        className="absolute inset-0 overflow-hidden"
+        className="absolute inset-0 overflow-hidden flex items-center justify-center bg-black"
         style={{ clipPath: `inset(0 ${100 - sliderPosition}% 0 0)` }}
       >
         <img
           src={beforeImage}
           alt={beforeLabel}
-          className="w-full h-full object-cover"
+          className="max-w-full max-h-full object-contain"
           draggable={false}
         />
       </div>
@@ -127,17 +127,32 @@ export function ImageComparisonSlider({
         </div>
       </div>
 
-      {/* Labels */}
-      <div className="absolute top-3 left-3 px-2 py-1 bg-black/50 rounded text-white text-xs font-medium">
-        {beforeLabel}
+      {/* Date Labels - Follow slider position */}
+      {/* Before label - left side of slider */}
+      <div
+        className="absolute top-4 z-10 pointer-events-none transition-all duration-75"
+        style={{
+          left: `${Math.max(5, sliderPosition / 2)}%`,
+          transform: "translateX(-50%)",
+          opacity: sliderPosition > 10 ? 1 : 0,
+        }}
+      >
+        <div className="px-4 py-2 bg-gray-700/95 backdrop-blur-sm rounded-lg text-white text-sm font-semibold border border-gray-600 shadow-lg">
+          {beforeLabel}
+        </div>
       </div>
-      <div className="absolute top-3 right-3 px-2 py-1 bg-black/50 rounded text-white text-xs font-medium">
-        {afterLabel}
-      </div>
-
-      {/* Percentage Indicator */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-2 py-1 bg-black/50 rounded text-white text-xs font-medium">
-        {Math.round(sliderPosition)}% / {Math.round(100 - sliderPosition)}%
+      {/* After label - right side of slider */}
+      <div
+        className="absolute top-4 z-10 pointer-events-none transition-all duration-75"
+        style={{
+          left: `${Math.min(95, sliderPosition + (100 - sliderPosition) / 2)}%`,
+          transform: "translateX(-50%)",
+          opacity: sliderPosition < 90 ? 1 : 0,
+        }}
+      >
+        <div className="px-4 py-2 bg-primary/95 backdrop-blur-sm rounded-lg text-white text-sm font-semibold border border-primary shadow-lg">
+          {afterLabel}
+        </div>
       </div>
     </div>
   );

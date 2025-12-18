@@ -1,0 +1,194 @@
+OBJETIVO
+Ajustar o frontend do projeto "Detector de Mudanças" para melhorar:
+- Intuitividade
+- Fluidez de uso
+- Clareza visual no fluxo
+- Comunicação do impacto (Desafio 5 – Detector de Mudanças em Imagens de Satélite)
+
+SEM adicionar novas features complexas.
+SEM alterar arquitetura base.
+FOCAR apenas em UX, UI e hierarquia visual.
+
+---
+
+CONTEXTO TÉCNICO
+Projeto em Next.js 15 + React 19 + TypeScript.
+Mapa com Leaflet.
+Comparação com ImageComparisonSlider.
+Estado global via AnalysisContext.
+Estilos com Tailwind + variáveis CSS (dark theme).
+
+---
+
+AJUSTES OBRIGATÓRIOS
+
+1️⃣ SIDEBAR → TRANSFORMAR EM FLUXO GUIADO (SEM WIZARD REAL)
+
+Arquivo(s) envolvidos:
+- components/satellite/SatellitePanel.tsx
+- components/results/AnalysisPanel.tsx
+
+AÇÃO:
+- Reorganizar visualmente a sidebar em 5 blocos sequenciais numerados:
+  ① Fonte de Satélite
+  ② Área de Análise
+  ③ Período
+  ④ Executar Análise
+  ⑤ Resultados
+
+COMO:
+- Adicionar títulos com numeração ("① Fonte de Satélite", etc)
+- Aumentar espaçamento vertical entre blocos (gap-6 ou gap-8)
+- Reduzir peso visual de textos secundários (opacity-70 / text-muted)
+
+NÃO:
+- Criar lógica de wizard
+- Bloquear etapas
+- Alterar comportamento funcional
+
+---
+
+2️⃣ BOTÃO PRINCIPAL → "DETECTAR MUDANÇAS" COMO AÇÃO HERÓI
+
+Arquivo:
+- components/satellite/SatellitePanel.tsx
+
+AÇÃO:
+- Tornar o botão de análise a principal ação visual da sidebar.
+
+COMO:
+- Fixar o botão no rodapé da sidebar (position: sticky ou layout flex-col justify-between)
+- Aumentar tamanho (size="lg")
+- Alterar texto para: "🔍 Analisar área selecionada"
+- Durante execução:
+  - Desabilitar botão
+  - Mostrar estado textual conforme AnalysisContext.status:
+    - downloading → "Baixando imagens de satélite..."
+    - analyzing → "Detectando alterações..."
+    - completed → "Análise concluída"
+
+---
+
+3️⃣ MAPA (ABA "MAPA") → REFORÇAR LEITURA VISUAL
+
+Arquivo:
+- components/map/MapView.tsx
+
+AÇÃO:
+- Melhorar entendimento imediato do que está sendo exibido.
+
+COMO:
+- Criar uma legenda fixa no canto inferior direito do mapa:
+  - Vegetação (verde)
+  - Desmatamento (marrom/vermelho)
+  - Expansão urbana (laranja)
+- Usar Card + Badge para legenda
+- Garantir que legenda NÃO interfira na navegação do mapa (pointer-events-none no container externo)
+
+EXTRA (SE SIMPLES):
+- Permitir toggle visual por tipo de mudança (checkbox simples)
+
+---
+
+4️⃣ ABA "COMPARAÇÃO" → CONTEXTO EXPLÍCITO DA ANÁLISE
+
+Arquivo:
+- components/comparison/ImageComparisonSlider.tsx
+
+AÇÃO:
+- Tornar a comparação autoexplicativa durante o pitch.
+
+COMO:
+- Adicionar header fixo acima do slider com:
+  - Fonte de satélite selecionada (Sentinel Hub / GEE / Planet / OpenSearch)
+  - Datas:
+    "Antes: DD/MM/AAAA | Depois: DD/MM/AAAA"
+- Usar Badge ou Card discreto (opacity-90)
+
+NÃO:
+- Alterar lógica do slider
+- Alterar carregamento das imagens
+
+---
+
+5️⃣ CONEXÃO RESULTADOS → MAPA → COMPARAÇÃO
+
+Arquivo(s):
+- components/results/AnalysisPanel.tsx
+- components/map/MapView.tsx
+- AnalysisContext
+
+AÇÃO:
+- Criar ligação visual entre números e território.
+
+COMO:
+- Ao clicar em um tipo de mudança (ex: Expansão Urbana):
+  - Filtrar/highlight apenas os polígonos daquele tipo no mapa
+- Ao clicar em um polígono no mapa:
+  - Se estiver na aba Comparação, focar automaticamente aquela área no slider
+
+SE NECESSÁRIO:
+- Adicionar estado simples no AnalysisContext:
+  selectedChangeType?: string
+  selectedFeatureId?: string
+
+---
+
+6️⃣ MICROAJUSTES DE LINGUAGEM (UX COPY)
+
+AÇÃO:
+Substituir termos técnicos por linguagem orientada a usuário.
+
+TROCAS:
+- "Fonte de Imagens" → "Fonte de Satélite"
+- "Detectar Mudanças" → "Analisar Área"
+- "Relatório de Mudanças" → "Resumo da Análise"
+- "Urban_expansion" → "Expansão Urbana"
+- "Vegetation_growth" → "Crescimento de Vegetação"
+
+---
+
+7️⃣ FEEDBACK VISUAL DE ESTADO (IMPORTANTE)
+
+Arquivo:
+- Componentes que consomem AnalysisContext.status
+
+AÇÃO:
+- Garantir feedback claro de estado da aplicação.
+
+COMO:
+- Loading overlay leve no mapa durante análise
+- Toast de sucesso já existente → manter
+- Em erro:
+  - Mensagem clara e orientada ("Falha ao baixar imagens da fonte selecionada")
+
+---
+
+RESTRIÇÕES IMPORTANTES
+
+NÃO:
+- Criar novas APIs
+- Criar backend novo
+- Refatorar arquitetura
+- Criar wizard complexo
+
+FOCAR:
+- Hierarquia visual
+- Clareza do fluxo
+- Impacto visual para pitch
+
+---
+
+RESULTADO ESPERADO
+
+Ao final, o usuário deve:
+- Entender o fluxo sem explicação
+- Saber onde clicar
+- Ver claramente:
+  área → antes → depois → impacto
+
+A interface deve parecer:
+"Plataforma de Análise Territorial"
+e não apenas "Ferramenta técnica de mapas".
+
+EXECUTAR AJUSTES COM CÓDIGO LIMPO, SEM QUEBRAR FUNCIONALIDADES EXISTENTES.

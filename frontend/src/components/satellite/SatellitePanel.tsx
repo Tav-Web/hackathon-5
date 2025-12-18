@@ -437,12 +437,6 @@ export function SatellitePanel({ onNewAnalysis }: SatellitePanelProps = {}) {
               </ClearAreaButton>
             )}
           </AreaButtonGroup>
-          {selectedBounds && (
-            <AreaSelectedText>
-              ✓ Área selecionada - arraste o retângulo verde no mapa para nova
-              seleção
-            </AreaSelectedText>
-          )}
           {selectedBounds && areaInfo && (
             <AreaInfoBox>
               <AreaInfoRow>
@@ -594,8 +588,12 @@ export function SatellitePanel({ onNewAnalysis }: SatellitePanelProps = {}) {
                         $selected={selectedChangeType === type}
                       >
                         <ChangeTypeInfo>
-                          <ChangeTypeColorDot $color={getChangeTypeColor(type)} />
-                          <ChangeTypeName $selected={selectedChangeType === type}>
+                          <ChangeTypeColorDot
+                            $color={getChangeTypeColor(type)}
+                          />
+                          <ChangeTypeName
+                            $selected={selectedChangeType === type}
+                          >
                             {translateChangeType(type)}
                           </ChangeTypeName>
                         </ChangeTypeInfo>

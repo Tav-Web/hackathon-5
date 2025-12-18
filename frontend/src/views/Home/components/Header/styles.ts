@@ -33,7 +33,7 @@ export const IconWrapper = styled(Box)`
 export const TextWrapper = styled(Box)``;
 
 export const Title = styled(Typography)`
-  font-size: 18px;
+  font-size: 24px !important;
   font-weight: 700;
   color: hsl(var(--foreground));
 `;

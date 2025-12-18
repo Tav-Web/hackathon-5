@@ -4,6 +4,26 @@ import { useCallback } from "react";
 import { Upload, X, Image as ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { useAnalysis } from "@/context/AnalysisContext";
+import {
+  UploadContainer,
+  UploadTitle,
+  DropZone,
+  DropZoneIcon,
+  DropZoneText,
+  ImageSlotsGrid,
+  ImageSlot,
+  SlotLabel,
+  ImagePreview,
+  ImagePreviewIcon,
+  ImageFilename,
+  RemoveButton,
+  UploadLabel,
+  UploadSlotButton,
+  UploadSlotIcon,
+  UploadSlotText,
+  HiddenInput,
+  UploadingText,
+} from "./styles";
 
 export function ImageUpload() {
   const { images, status, uploadImageFile, removeImage } = useAnalysis();
@@ -44,85 +64,86 @@ export function ImageUpload() {
   const afterImage = images.find((img) => img.type === "after");
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-semibold text-white">Upload de Imagens</h2>
+    <UploadContainer>
+      <UploadTitle>Upload de Imagens</UploadTitle>
 
       {/* Drop Zone */}
-      <div
-        className="border-2 border-dashed rounded-lg p-4 text-center transition-colors border-gray-700 hover:border-gray-600"
-        onDragOver={(e) => e.preventDefault()}
+      <DropZone
+        onDragOver={(e: React.DragEvent) => e.preventDefault()}
         onDrop={handleDrop}
       >
-        <Upload className="mx-auto h-8 w-8 text-gray-400 mb-2" />
-        <p className="text-sm text-gray-400">Arraste imagens aqui ou use os botões abaixo</p>
-      </div>
+        <DropZoneIcon>
+          <Upload className="h-8 w-8" />
+        </DropZoneIcon>
+        <DropZoneText>Arraste imagens aqui ou use os botões abaixo</DropZoneText>
+      </DropZone>
 
       {/* Image Slots */}
-      <div className="grid grid-cols-2 gap-3">
+      <ImageSlotsGrid>
         {/* Before */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-300">Antes</label>
+        <ImageSlot>
+          <SlotLabel>Antes</SlotLabel>
           {beforeImage ? (
-            <div className="relative bg-gray-800 rounded-lg p-3">
-              <ImageIcon className="h-6 w-6 text-green-500 mb-1" />
-              <p className="text-xs text-gray-400 truncate">{beforeImage.filename}</p>
-              <button
-                onClick={() => removeImage("before")}
-                className="absolute top-1 right-1 p-1 hover:bg-gray-700 rounded"
-              >
-                <X className="h-4 w-4 text-gray-400" />
-              </button>
-            </div>
+            <ImagePreview>
+              <ImagePreviewIcon $color="#22c55e">
+                <ImageIcon className="h-6 w-6" />
+              </ImagePreviewIcon>
+              <ImageFilename>{beforeImage.filename}</ImageFilename>
+              <RemoveButton onClick={() => removeImage("before")}>
+                <X className="h-4 w-4" />
+              </RemoveButton>
+            </ImagePreview>
           ) : (
-            <label className="block cursor-pointer">
-              <div className="bg-gray-800 rounded-lg p-3 text-center hover:bg-gray-750 transition-colors">
-                <Upload className="h-6 w-6 text-gray-400 mx-auto mb-1" />
-                <span className="text-xs text-gray-400">Selecionar</span>
-              </div>
-              <input
+            <UploadLabel>
+              <UploadSlotButton>
+                <UploadSlotIcon>
+                  <Upload className="h-6 w-6" />
+                </UploadSlotIcon>
+                <UploadSlotText>Selecionar</UploadSlotText>
+              </UploadSlotButton>
+              <HiddenInput
                 type="file"
-                className="hidden"
                 accept="image/*,.tif,.tiff"
                 onChange={(e) => handleFileSelect(e, "before")}
                 disabled={uploading}
               />
-            </label>
+            </UploadLabel>
           )}
-        </div>
+        </ImageSlot>
 
         {/* After */}
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-300">Depois</label>
+        <ImageSlot>
+          <SlotLabel>Depois</SlotLabel>
           {afterImage ? (
-            <div className="relative bg-gray-800 rounded-lg p-3">
-              <ImageIcon className="h-6 w-6 text-blue-500 mb-1" />
-              <p className="text-xs text-gray-400 truncate">{afterImage.filename}</p>
-              <button
-                onClick={() => removeImage("after")}
-                className="absolute top-1 right-1 p-1 hover:bg-gray-700 rounded"
-              >
-                <X className="h-4 w-4 text-gray-400" />
-              </button>
-            </div>
+            <ImagePreview>
+              <ImagePreviewIcon $color="#3b82f6">
+                <ImageIcon className="h-6 w-6" />
+              </ImagePreviewIcon>
+              <ImageFilename>{afterImage.filename}</ImageFilename>
+              <RemoveButton onClick={() => removeImage("after")}>
+                <X className="h-4 w-4" />
+              </RemoveButton>
+            </ImagePreview>
           ) : (
-            <label className="block cursor-pointer">
-              <div className="bg-gray-800 rounded-lg p-3 text-center hover:bg-gray-750 transition-colors">
-                <Upload className="h-6 w-6 text-gray-400 mx-auto mb-1" />
-                <span className="text-xs text-gray-400">Selecionar</span>
-              </div>
-              <input
+            <UploadLabel>
+              <UploadSlotButton>
+                <UploadSlotIcon>
+                  <Upload className="h-6 w-6" />
+                </UploadSlotIcon>
+                <UploadSlotText>Selecionar</UploadSlotText>
+              </UploadSlotButton>
+              <HiddenInput
                 type="file"
-                className="hidden"
                 accept="image/*,.tif,.tiff"
                 onChange={(e) => handleFileSelect(e, "after")}
                 disabled={uploading}
               />
-            </label>
+            </UploadLabel>
           )}
-        </div>
-      </div>
+        </ImageSlot>
+      </ImageSlotsGrid>
 
-      {uploading && <p className="text-sm text-blue-400 text-center">Enviando...</p>}
-    </div>
+      {uploading && <UploadingText>Enviando...</UploadingText>}
+    </UploadContainer>
   );
 }

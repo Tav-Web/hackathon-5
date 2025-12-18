@@ -26,22 +26,50 @@ class EarthEngineService:
         if cls._initialized:
             return
 
-        try:
-            # Get credentials from settings
-            project_id = settings.GEE_PROJECT_ID
-            key_file = settings.GEE_SERVICE_ACCOUNT_KEY
+        import json
+        import tempfile
 
+        try:
+            project_id = settings.GEE_PROJECT_ID
+
+            # Method 1: JSON string from environment (for production/docker)
+            gee_json = os.getenv("GEE_SERVICE_ACCOUNT_JSON")
+            if gee_json:
+                try:
+                    sa_info = json.loads(gee_json)
+                    service_account_email = sa_info.get('client_email')
+
+                    # Create temp file with JSON
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+                        json.dump(sa_info, f)
+                        temp_key_file = f.name
+
+                    credentials = ee.ServiceAccountCredentials(service_account_email, temp_key_file)
+                    ee.Initialize(credentials, project=project_id)
+                    print(f"Earth Engine initialized with service account JSON (project: {project_id})")
+                    cls._initialized = True
+                    return
+                except json.JSONDecodeError as e:
+                    print(f"Warning: GEE_SERVICE_ACCOUNT_JSON invalid: {e}")
+
+            # Method 2: Key file path (for local development)
+            key_file = settings.GEE_SERVICE_ACCOUNT_KEY
             if key_file and os.path.exists(key_file):
-                # Use service account credentials
-                credentials = ee.ServiceAccountCredentials(None, key_file)
+                with open(key_file, 'r') as f:
+                    sa_info = json.load(f)
+                    service_account_email = sa_info.get('client_email')
+
+                credentials = ee.ServiceAccountCredentials(service_account_email, key_file)
                 ee.Initialize(credentials, project=project_id)
-                print(f"Earth Engine initialized with service account (project: {project_id})")
-            elif project_id:
-                # Use application default credentials with project
+                print(f"Earth Engine initialized with service account file (project: {project_id})")
+                cls._initialized = True
+                return
+
+            # Method 3: Default credentials
+            if project_id:
                 ee.Initialize(project=project_id, opt_url='https://earthengine-highvolume.googleapis.com')
                 print(f"Earth Engine initialized with default credentials (project: {project_id})")
             else:
-                # Fallback to default initialization
                 ee.Initialize(opt_url='https://earthengine-highvolume.googleapis.com')
                 print("Earth Engine initialized with default credentials")
 

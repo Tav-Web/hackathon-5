@@ -29,7 +29,7 @@ export function Header({ onOpenChat, hasCompletedAnalysis, chatDisabled }: Heade
             <Satellite size={24} />
           </IconWrapper>
           <TextWrapper>
-            <Title>Detector de Mudanças Geográficas</Title>
+            <Title>TimeLens</Title>
             <Subtitle>Análise de Imagens de Satélite</Subtitle>
           </TextWrapper>
         </LeftSection>

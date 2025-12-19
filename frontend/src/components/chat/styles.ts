@@ -52,7 +52,7 @@ export const AnalysisSummary = styled(Typography)`
   font-weight: 500;
 `;
 
-export const AnalysisDetail = styled(Typography)`
+export const AnalysisDetail = styled(Box)`
   font-size: 12px;
   line-height: 1.6;
   color: hsl(var(--muted-foreground));

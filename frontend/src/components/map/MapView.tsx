@@ -379,29 +379,50 @@ export default function MapView({
   // Não atualizar view automaticamente - deixar o usuário controlar o mapa
   // A view inicial é definida no initMap
 
-  // Gerenciar seleção de bounds
+  // Gerenciar seleção de bounds (mouse + touch)
   useEffect(() => {
     if (!mapRef.current || !leafletRef.current) return;
 
     const map = mapRef.current;
     const L = leafletRef.current;
+    const container = map.getContainer();
 
     if (isSelectingBounds) {
       // Habilitar modo de seleção
       map.dragging.disable();
-      map.getContainer().style.cursor = "crosshair";
+      map.touchZoom.disable();
+      container.style.cursor = "crosshair";
 
       let startLatLng: L.LatLng | null = null;
       let tempRect: L.Rectangle | null = null;
 
-      const onMouseDown = (e: L.LeafletMouseEvent) => {
+      // Função para obter LatLng de um evento (mouse ou touch)
+      const getLatLngFromEvent = (e: L.LeafletMouseEvent | TouchEvent): L.LatLng | null => {
+        if ('latlng' in e) {
+          return e.latlng;
+        }
+        // Touch event
+        if ('touches' in e && e.touches.length > 0) {
+          const touch = e.touches[0];
+          const point = map.containerPointToLatLng([touch.clientX - container.getBoundingClientRect().left, touch.clientY - container.getBoundingClientRect().top]);
+          return point;
+        }
+        if ('changedTouches' in e && e.changedTouches.length > 0) {
+          const touch = e.changedTouches[0];
+          const point = map.containerPointToLatLng([touch.clientX - container.getBoundingClientRect().left, touch.clientY - container.getBoundingClientRect().top]);
+          return point;
+        }
+        return null;
+      };
+
+      const onStart = (e: L.LeafletMouseEvent) => {
         startLatLng = e.latlng;
         if (tempRect) {
           map.removeLayer(tempRect);
         }
       };
 
-      const onMouseMove = (e: L.LeafletMouseEvent) => {
+      const onMove = (e: L.LeafletMouseEvent) => {
         if (!startLatLng) return;
 
         const bounds = L.latLngBounds(startLatLng, e.latlng);
@@ -417,7 +438,7 @@ export default function MapView({
         }
       };
 
-      const onMouseUp = (e: L.LeafletMouseEvent) => {
+      const onEnd = (e: L.LeafletMouseEvent) => {
         if (!startLatLng) return;
 
         const bounds = L.latLngBounds(startLatLng, e.latlng);
@@ -453,26 +474,113 @@ export default function MapView({
 
         // Restaurar mapa
         map.dragging.enable();
-        map.getContainer().style.cursor = "";
+        map.touchZoom.enable();
+        container.style.cursor = "";
       };
 
-      map.on("mousedown", onMouseDown);
-      map.on("mousemove", onMouseMove);
-      map.on("mouseup", onMouseUp);
+      // Touch event handlers
+      const onTouchStart = (e: TouchEvent) => {
+        if (e.touches.length !== 1) return;
+        e.preventDefault();
+        const latlng = getLatLngFromEvent(e);
+        if (latlng) {
+          startLatLng = latlng;
+          if (tempRect) {
+            map.removeLayer(tempRect);
+          }
+        }
+      };
+
+      const onTouchMove = (e: TouchEvent) => {
+        if (!startLatLng || e.touches.length !== 1) return;
+        e.preventDefault();
+        const latlng = getLatLngFromEvent(e);
+        if (!latlng) return;
+
+        const bounds = L.latLngBounds(startLatLng, latlng);
+
+        if (tempRect) {
+          tempRect.setBounds(bounds);
+        } else {
+          tempRect = L.rectangle(bounds, {
+            color: "#3b82f6",
+            weight: 2,
+            fillOpacity: 0.2,
+          }).addTo(map);
+        }
+      };
+
+      const onTouchEnd = (e: TouchEvent) => {
+        if (!startLatLng) return;
+        e.preventDefault();
+        const latlng = getLatLngFromEvent(e);
+        if (!latlng) return;
+
+        const bounds = L.latLngBounds(startLatLng, latlng);
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+
+        if (onBoundsSelected) {
+          onBoundsSelected({
+            min_lon: sw.lng,
+            min_lat: sw.lat,
+            max_lon: ne.lng,
+            max_lat: ne.lat,
+          });
+        }
+
+        // Atualizar o retângulo de seleção permanente
+        if (selectionRectRef.current) {
+          map.removeLayer(selectionRectRef.current);
+        }
+        selectionRectRef.current = L.rectangle(bounds, {
+          color: "#22c55e",
+          weight: 2,
+          fillOpacity: 0.1,
+          dashArray: "5, 5",
+        }).addTo(map);
+
+        // Limpar
+        if (tempRect) {
+          map.removeLayer(tempRect);
+          tempRect = null;
+        }
+        startLatLng = null;
+
+        // Restaurar mapa
+        map.dragging.enable();
+        map.touchZoom.enable();
+        container.style.cursor = "";
+      };
+
+      // Mouse events
+      map.on("mousedown", onStart);
+      map.on("mousemove", onMove);
+      map.on("mouseup", onEnd);
+
+      // Touch events (on container)
+      container.addEventListener("touchstart", onTouchStart, { passive: false });
+      container.addEventListener("touchmove", onTouchMove, { passive: false });
+      container.addEventListener("touchend", onTouchEnd, { passive: false });
 
       return () => {
-        map.off("mousedown", onMouseDown);
-        map.off("mousemove", onMouseMove);
-        map.off("mouseup", onMouseUp);
+        map.off("mousedown", onStart);
+        map.off("mousemove", onMove);
+        map.off("mouseup", onEnd);
+        container.removeEventListener("touchstart", onTouchStart);
+        container.removeEventListener("touchmove", onTouchMove);
+        container.removeEventListener("touchend", onTouchEnd);
         map.dragging.enable();
-        map.getContainer().style.cursor = "";
+        map.touchZoom.enable();
+        container.style.cursor = "";
         if (tempRect) {
           map.removeLayer(tempRect);
         }
       };
     } else {
       map.dragging.enable();
-      map.getContainer().style.cursor = "";
+      map.touchZoom.enable();
+      container.style.cursor = "";
     }
   }, [isSelectingBounds, onBoundsSelected]);
 

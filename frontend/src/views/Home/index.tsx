@@ -37,6 +37,7 @@ export function HomeView() {
   const [viewMode, setViewMode] = useState<ViewMode>("map");
   const [isBottomPanelOpen, setIsBottomPanelOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   // GEE Analysis hook for advanced analysis
   const geeAnalysis = useGeeAnalysis({
@@ -74,6 +75,7 @@ export function HomeView() {
     KEYBOARD_EVENTS.CLOSE_OVERLAY,
     useCallback(() => {
       setIsChatOpen(false);
+      setIsSidebarOpen(false);
       setIsSelectingBounds(false);
     }, [setIsSelectingBounds])
   );
@@ -107,6 +109,7 @@ export function HomeView() {
     <MainContainer>
       <Header
         onOpenChat={() => setIsChatOpen(true)}
+        onOpenSidebar={() => setIsSidebarOpen(true)}
         hasCompletedAnalysis={hasCompletedAnalysis}
         chatDisabled={!chatAnalysisId}
       />
@@ -116,6 +119,8 @@ export function HomeView() {
           activeTab={activeTab}
           onTabChange={setActiveTab}
           onNewAnalysis={() => setViewMode("map")}
+          isOpen={isSidebarOpen}
+          onClose={() => setIsSidebarOpen(false)}
         />
 
         <MainArea

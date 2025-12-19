@@ -335,7 +335,11 @@ export function AIChatPanel({ analysisId, analysisType = "auto" }: AIChatPanelPr
                 </MessageAvatar>
               )}
               <MessageBubble $isUser={message.role === "user"}>
-                <MessageContent>{message.content}</MessageContent>
+                {message.role === "assistant" ? (
+                  <SimpleMarkdown>{message.content}</SimpleMarkdown>
+                ) : (
+                  <MessageContent>{message.content}</MessageContent>
+                )}
               </MessageBubble>
               {message.role === "user" && (
                 <MessageAvatar $variant="user">

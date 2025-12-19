@@ -83,28 +83,40 @@ class GeeService:
         try:
             # Método 1: JSON string direto (preferido para deploy)
             gee_json = os.getenv("GEE_SERVICE_ACCOUNT_JSON")
+            print(f"[GEE DEBUG] GEE_SERVICE_ACCOUNT_JSON presente: {bool(gee_json)}")
             if gee_json:
+                print(f"[GEE DEBUG] Tamanho do JSON: {len(gee_json)} chars")
+                print(f"[GEE DEBUG] Primeiros 100 chars: {gee_json[:100]}")
                 try:
                     sa_info = json.loads(gee_json)
                     service_account_email = sa_info.get('client_email')
+                    print(f"[GEE DEBUG] JSON parseado com sucesso! Email: {service_account_email}")
+                    print(f"[GEE DEBUG] Project ID: {sa_info.get('project_id')}")
+                    print(f"[GEE DEBUG] Private key presente: {bool(sa_info.get('private_key'))}")
 
                     # Cria arquivo temporário com o JSON
                     with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
                         json.dump(sa_info, f)
                         temp_key_file = f.name
+                    print(f"[GEE DEBUG] Arquivo temporário criado: {temp_key_file}")
 
                     credentials = ee.ServiceAccountCredentials(
                         email=service_account_email,
                         key_file=temp_key_file
                     )
+                    print(f"[GEE DEBUG] Credentials criadas, inicializando EE...")
                     ee.Initialize(
                         credentials=credentials,
                         project=settings.GEE_PROJECT_ID or None
                     )
+                    print(f"[GEE DEBUG] EE inicializado com sucesso!")
                     self._initialized = True
                     return
-                except json.JSONDecodeError:
-                    print("Aviso: GEE_SERVICE_ACCOUNT_JSON invalido, tentando arquivo...")
+                except json.JSONDecodeError as e:
+                    print(f"[GEE DEBUG] ERRO ao parsear JSON: {e}")
+                    print(f"[GEE DEBUG] JSON recebido: {gee_json[:200]}...")
+                except Exception as e:
+                    print(f"[GEE DEBUG] ERRO ao inicializar com JSON: {type(e).__name__}: {e}")
 
             # Método 2: Caminho para arquivo JSON (dev local)
             if settings.GEE_SERVICE_ACCOUNT_KEY:

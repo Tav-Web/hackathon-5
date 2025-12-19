@@ -1,6 +1,6 @@
 "use client";
 
-import { Satellite } from "lucide-react";
+import { Satellite, Menu } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { ChatDrawerTrigger } from "@/components/chat/ChatDrawer";
 import {
@@ -12,24 +12,29 @@ import {
   Title,
   Subtitle,
   RightSection,
+  MobileMenuButton,
 } from "./styles";
 
 interface HeaderProps {
   onOpenChat: () => void;
+  onOpenSidebar: () => void;
   hasCompletedAnalysis: boolean;
   chatDisabled: boolean;
 }
 
-export function Header({ onOpenChat, hasCompletedAnalysis, chatDisabled }: HeaderProps) {
+export function Header({ onOpenChat, onOpenSidebar, hasCompletedAnalysis, chatDisabled }: HeaderProps) {
   return (
     <Container>
       <Content>
         <LeftSection>
+          <MobileMenuButton onClick={onOpenSidebar} aria-label="Abrir menu">
+            <Menu size={24} />
+          </MobileMenuButton>
           <IconWrapper>
             <Satellite size={24} />
           </IconWrapper>
           <TextWrapper>
-            <Title>Detector de Mudanças Geográficas</Title>
+            <Title>TimeLens</Title>
             <Subtitle>Análise de Imagens de Satélite</Subtitle>
           </TextWrapper>
         </LeftSection>

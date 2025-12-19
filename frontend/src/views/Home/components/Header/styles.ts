@@ -48,3 +48,24 @@ export const RightSection = styled(Box)`
   align-items: center;
   gap: 12px;
 `;
+
+export const MobileMenuButton = styled.button`
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  background: transparent;
+  border: none;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: hsl(var(--accent));
+  }
+
+  @media (max-width: 768px) {
+    display: flex;
+  }
+`;
